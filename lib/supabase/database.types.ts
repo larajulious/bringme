@@ -116,6 +116,9 @@ type PassOrderRow = {
   /** Service role only (not granted to hosts). */
   checkout_url?: string | null;
   polar_environment?: "sandbox" | "production" | null;
+  /** Payment evidence: service role only. */
+  paid_amount_minor?: number | null;
+  paid_currency?: string | null;
   polar_order_id?: string | null;
   polar_checkout_id?: string | null;
   polar_product_id?: string | null;

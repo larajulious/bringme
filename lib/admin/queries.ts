@@ -1,5 +1,6 @@
 import "server-only";
 
+import { bucketDaily, lastDays } from "@/lib/admin/series";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { createClient } from "@/lib/supabase/server";
@@ -71,5 +72,36 @@ export async function getSubscriberDetail(userId: string, gamesPage: number, pag
     trial: trial.data?.[0] ?? null,
     games: games.data ?? [],
     gameTotal: gameCount.count ?? 0,
+  };
+}
+
+/**
+ * Daily activity for the overview charts (last `days` UTC days). Reads run under the admin's own session
+ * (admin RLS policies on profiles / games / pass_orders). A failed read yields an empty series: the
+ * headline numbers on the page still render.
+ */
+export async function getActivity(days = 30) {
+  const supabase = await createClient();
+  const since = `${lastDays(days)[0]}T00:00:00Z`;
+  const [subs, games, orders] = await Promise.all([
+    supabase.from("profiles").select("created_at").eq("role", "subscriber").gte("created_at", since).limit(5000),
+    supabase.from("games").select("created_at, game_type").gte("created_at", since).limit(5000),
+    // Payment evidence + environment are not granted to the authenticated role: read with the service role.
+    // Safe because the caller has already passed requireAdminPage(); nothing here is returned raw.
+    createAdminClient()
+      .from("pass_orders")
+      .select("paid_at, paid_currency, paid_amount_minor, refunded_amount_minor")
+      .eq("polar_environment", "production").in("status", ["paid", "partially_refunded", "refunded"])
+      .gte("paid_at", since).limit(5000),
+  ]);
+  const currencies = ["PHP", "USD"] as const;
+  return {
+    days,
+    signups: bucketDaily((subs.data ?? []).map((r) => ({ at: r.created_at, key: "signups", value: 1 })), days, ["signups"]),
+    games: bucketDaily((games.data ?? []).map((r) => ({ at: r.created_at, key: r.game_type, value: 1 })), days, ["bring_me", "bingosnap"]),
+    revenue: bucketDaily(
+      (orders.data ?? []).map((r) => ({ at: r.paid_at, key: r.paid_currency ?? "", value: (r.paid_amount_minor ?? 0) - (r.refunded_amount_minor ?? 0) })),
+      days, currencies,
+    ),
   };
 }
