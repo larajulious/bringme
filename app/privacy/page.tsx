@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 import { pageMeta } from "@/lib/site/seo";
-import { Camera, Clock, Cookie, CreditCard, Database, Eye, Lock, Server, Sparkles, UserCheck, Users, Wrench } from "lucide-react";
+import { Camera, Clock, Cookie, CreditCard, Database, Eye, Lock, Mail, Server, Sparkles, UserCheck, Users, Wrench } from "lucide-react";
 
-import { LegalPage, type LegalSection } from "@/components/marketing/legal-page";
+import { LegalPage, SUPPORT_EMAIL, type LegalSection } from "@/components/marketing/legal-page";
 
 export const metadata: Metadata = pageMeta({
   title: "Privacy Policy",
@@ -105,7 +105,7 @@ const sections: LegalSection[] = [
       <ul>
         <li><strong>Login cookies</strong> keep Game Masters signed in.</li>
         <li>A <strong>player cookie</strong> keeps you in your game if you refresh or lose connection. It expires after 12 hours.</li>
-        <li>Our homepage remembers your own Snappy boop count and sound setting in your browser only.</li>
+        <li>If you allow <strong>Preferences</strong>, we remember your Snappy boop count, sound setting and list/card view in your browser only. Choose &ldquo;Cookie settings&rdquo; in the footer to change this anytime; turning it off deletes them.</li>
         <li>We don&apos;t use advertising or third-party tracking cookies.</li>
       </ul>
     ),
@@ -132,6 +132,10 @@ const sections: LegalSection[] = [
   {
     id: "changes", icon: Wrench, tone: "bg-brand-night text-brand-yellow", title: "Children and changes",
     body: <p>BringMe! isn&apos;t meant for young children to use on their own; kids should play with a parent, guardian or teacher hosting. We may update this policy as BringMe! grows — we&apos;ll change the date at the top, and show important changes in the app.</p>,
+  },
+  {
+    id: "contact", icon: Mail, tone: "bg-primary text-white", title: "Contact us",
+    body: <p>Questions, or want to see, correct or delete your information? Email us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>,
   },
 ];
 

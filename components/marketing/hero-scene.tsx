@@ -4,6 +4,7 @@ import { Hand, Sparkles, StickyNote, Timer, Trophy, Volume2, VolumeX } from "luc
 import { useEffect, useRef, useState } from "react";
 
 import { Mascot } from "@/components/brand/mascot";
+import { setPreference } from "@/lib/site/consent";
 import { useBoopCounter } from "@/components/marketing/use-boop-counter";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,7 @@ function read(key: string) {
   try { return window.localStorage.getItem(key); } catch { return null; }
 }
 function write(key: string, value: string) {
-  try { window.localStorage.setItem(key, value); } catch { /* per-visitor nicety only */ }
+  setPreference(key, value);
 }
 
 /** A short camera-shutter "click", synthesised with Web Audio (no audio files, no library). */

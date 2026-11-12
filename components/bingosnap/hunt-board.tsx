@@ -15,6 +15,7 @@ import { lockedCellIds } from "@/lib/bingosnap/board";
 import { evaluateCard, patternLabel, type CardEvaluation } from "@/lib/bingosnap/completion";
 import type { BingoLayoutCell, BingoPlayerSubmission, WinMode } from "@/lib/bingosnap/types";
 import { photoFileName, savePhotoCopies } from "@/lib/photos/export";
+import { setPreference } from "@/lib/site/consent";
 import { cn } from "@/lib/utils";
 import type { CapturedPhoto } from "@/lib/photos/process";
 
@@ -40,7 +41,7 @@ function useView(): [View, (v: View) => void] {
   }, []);
   const set = useCallback((v: View) => {
     setView(v);
-    try { localStorage.setItem(VIEW_KEY, v); } catch { /* not remembered */ }
+    setPreference(VIEW_KEY, v);
   }, []);
   return [view, set];
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { setPreference } from "@/lib/site/consent";
 import { IDLE_FLUSH_MS, MAX_BATCH } from "@/lib/snappy/constants";
 
 const RETRY_MS = 15_000; // after a failed send, try again once the dust settles (never a tight loop)
@@ -12,7 +13,7 @@ function readMine(): number {
   try { return Number(window.localStorage.getItem(MINE_KEY)) || 0; } catch { return 0; }
 }
 function writeMine(n: number) {
-  try { window.localStorage.setItem(MINE_KEY, String(n)); } catch { /* per-visitor nicety only */ }
+  setPreference(MINE_KEY, String(n));
 }
 
 /**

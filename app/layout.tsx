@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, Nunito } from "next/font/google";
 
+import { CookieNotice } from "@/components/layout/cookie-notice";
 import { HydrationMark } from "@/components/layout/fit-viewport";
 import { ToastProvider } from "@/components/ui/toast";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE } from "@/lib/site/seo";
@@ -70,6 +71,7 @@ export default function RootLayout({
       <body>
         <HydrationMark />
         <ToastProvider>{children}</ToastProvider>
+        <CookieNotice />
       </body>
     </html>
   );

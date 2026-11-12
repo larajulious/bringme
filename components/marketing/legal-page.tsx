@@ -5,6 +5,7 @@ import { BadgeCheck } from "lucide-react";
 import { Backdrop } from "@/components/brand/backdrop";
 import { Logo } from "@/components/brand/logo";
 import { Mascot } from "@/components/brand/mascot";
+import { CookieSettingsButton } from "@/components/layout/cookie-notice";
 import { SiteHeader } from "@/components/layout/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export type LegalSection = { id: string; icon: LucideIcon; tone: string; title: string; body: React.ReactNode };
 
-/** Optional public support address (not a secret). Set NEXT_PUBLIC_SUPPORT_EMAIL to show a mail link. */
-const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || null;
+/** Public support address (not a secret). Override with NEXT_PUBLIC_SUPPORT_EMAIL. */
+export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "hello@juliouslara.com";
 
 /** Shared footer for public pages, with links to the legal pages. */
 export function SiteFooter() {
@@ -24,6 +25,7 @@ export function SiteFooter() {
       <nav aria-label="Legal" className="mt-3 flex justify-center gap-4">
         <Link href="/terms" className="font-semibold underline underline-offset-4 hover:text-brand-yellow">Terms &amp; Conditions</Link>
         <Link href="/privacy" className="font-semibold underline underline-offset-4 hover:text-brand-yellow">Privacy Policy</Link>
+        <CookieSettingsButton className="font-semibold underline underline-offset-4 hover:text-brand-yellow" />
       </nav>
     </footer>
   );
