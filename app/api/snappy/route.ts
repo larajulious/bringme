@@ -33,7 +33,10 @@ export async function GET() {
 export async function POST(request: Request) {
   return handle(async () => {
     const origin = request.headers.get("origin");
-    if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, "cross_origin");
+    // Behind a proxy `request.url` can carry an internal host, so compare against the public host headers.
+    const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? new URL(request.url).host;
+    const originHost = origin ? URL.canParse(origin) ? new URL(origin).host : null : host;
+    if (originHost !== host.split(",")[0].trim()) throw new HttpError(403, "cross_origin");
 
     const want = parseTaps(await readJson(request));
     if (want === null) throw new HttpError(400, "invalid_taps");
