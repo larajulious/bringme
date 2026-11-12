@@ -29,7 +29,7 @@ export type TrialCard = { maxPlayers: number; maxRounds: number; days: number; s
 export const PASS_TERMS_SENTENCE = "One-time payment. Seven days of access. No automatic renewal.";
 export const PASS_TERMS = ["One-time purchase", "7 days of access", "No automatic renewal"] as const;
 
-const ERRORS: Record<string, string> = {
+export const ERRORS: Record<string, string> = {
   pricing_unavailable: "We couldn't confirm that exact price with our payment provider, so you were not sent to pay. Please try again later or choose the other currency.",
   pricing_out_of_sync: "This price is being updated, so it can't be bought right now. You have not been charged.",
   checkout_unavailable: "Checkout is not available right now. You have not been charged.",

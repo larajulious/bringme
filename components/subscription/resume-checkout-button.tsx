@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ERRORS } from "@/components/subscription/plan-picker";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 
@@ -16,9 +17,9 @@ export function ResumeCheckoutButton({ planCode, currency }: { planCode: string;
       const res = await fetch("/api/billing/checkout", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ planCode, currency }),
       });
-      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (res.ok && data.url) { window.location.assign(data.url); return; }
-      toast(res.status === 401 ? "Please sign in again." : "Couldn't reopen checkout. You have not been charged.", "error");
+      toast(ERRORS[data.error ?? ""] ?? (res.status === 401 ? "Please sign in again." : `Couldn't reopen checkout (${data.error ?? res.status}). You have not been charged.`), "error");
     } catch {
       toast("You seem to be offline. You have not been charged.", "error");
     }
