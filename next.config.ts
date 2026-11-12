@@ -23,11 +23,22 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["*.trycloudflare.com"],
   // Retired password screens: one passwordless page now handles sign-in and sign-up (query, e.g. ?next=, is kept).
   async redirects() {
-    return ["/auth/sign-up", "/auth/sign-up-success", "/auth/forgot-password", "/auth/update-password"].map((source) => ({
+    const retired = ["/auth/sign-up", "/auth/sign-up-success", "/auth/forgot-password", "/auth/update-password"].map((source) => ({
       source,
       destination: "/auth/login",
       permanent: false,
     }));
+    return [
+      // One canonical host: Supabase session cookies are host-only, so a sign-in on the apex
+      // would be lost when /auth/continue redirects to www (bounce back to /auth/login).
+      {
+        source: "/:path*",
+        has: [{ type: "host" as const, value: "bringme.fun" }],
+        destination: "https://www.bringme.fun/:path*",
+        permanent: true,
+      },
+      ...retired,
+    ];
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
