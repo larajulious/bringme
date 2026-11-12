@@ -625,6 +625,17 @@ export type Database = {
       add_snappy_taps: { Args: { p_taps: number }; Returns: number };
       /** Service role only: total homepage taps. */
       get_snappy_taps: { Args: Record<string, never>; Returns: number };
+      /** Service role only: signup pre-check (the Auth hook is the authoritative check). */
+      is_disposable_email: { Args: { p_email: string }; Returns: boolean };
+      /** Service role only: validates and activates a new disposable-domain list (raises on any failed check). */
+      apply_disposable_email_list: {
+        Args: { p_domains: string[]; p_source: string; p_source_ref?: string | null; p_min_count?: number; p_allow_shrink?: boolean };
+        Returns: Json;
+      };
+      /** Service role only: re-activates a stored list version (default: the one before the active list). */
+      rollback_disposable_email_list: { Args: { p_version_id?: number | null }; Returns: Json };
+      /** Service role only: active list version, counts and stored versions. */
+      disposable_email_list_status: { Args: Record<string, never>; Returns: Json };
       /** Signed-in host: status of THEIR checkout (read-only). */
       my_checkout_status: { Args: { p_checkout_id: string }; Returns: Json };
       /** Service role only, AFTER webhook signature verification. Idempotent per (provider, event_id). */

@@ -289,6 +289,31 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
 
   return (
     <div className="grid gap-6">
+      {/* ------------------------------------------------ actions: sticky toolbar under the page header */}
+      <div className="sticky -top-2 z-20 rounded-3xl border bg-card px-3 py-2.5 shadow-card sm:-top-5 sm:px-4 lg:-top-9 lg:short:-top-5">
+        <div className="flex items-center gap-2">
+          <p className="mr-auto min-w-0 truncate text-sm font-semibold" aria-live="polite">
+            {busy === "save" ? "Saving…" : busy === "publish" ? "Publishing…" : dirty
+              ? <span className="text-brand-coral">● Unsaved<span className="hidden sm:inline"> changes</span></span>
+              : status === "new" ? <span className="text-muted-foreground">Not saved yet</span>
+              : <span className="text-brand-success">✓ {status === "lobby" ? <>Published<span className="hidden sm:inline"> · all changes saved</span></> : "Draft saved"}</span>}
+          </p>
+          {status !== "lobby" ? (
+            <Button type="button" variant="outline" size="sm" className="sm:h-11 sm:px-5 sm:text-base" disabled={disabled || (!dirty && status !== "new")} onClick={() => void save(false)}>
+              {busy === "save" ? "Saving…" : "Save draft"}
+            </Button>
+          ) : null}
+          {status === "lobby" ? (
+            <Button type="button" size="sm" className="sm:h-11 sm:px-5 sm:text-base" disabled={disabled || !dirty} onClick={() => void save(false)}>{busy === "save" ? "Saving…" : "Save changes"}</Button>
+          ) : (
+            <Button type="button" size="sm" className="sm:h-11 sm:px-5 sm:text-base" disabled={disabled} onClick={() => void save(true)}>
+              {busy === "publish" ? "Publishing…" : <><Check aria-hidden="true" /> Publish<span className="hidden sm:inline"> board</span></>}
+            </Button>
+          )}
+        </div>
+        {/* A validation message disappears by itself once every square is fixed. */}
+        {error && !(error.validation && problems.every((x) => x === null)) ? <p role="alert" className="mt-2 rounded-2xl bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">{error.text}</p> : null}
+      </div>
       <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)] xl:grid-rows-[auto_1fr] xl:items-start">
         {/* ------------------------------------------------ setup */}
         <Card className="xl:col-start-1 xl:row-start-1">
@@ -339,7 +364,7 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
         </Card>
 
         {/* ------------------------------------------------ the board */}
-        <section aria-labelledby="bs-board-h" className="grid min-w-0 gap-4 rounded-4xl border bg-card p-4 shadow-card sm:p-6 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+        <section aria-labelledby="bs-board-h" className="grid min-w-0 gap-4 rounded-4xl border bg-card p-4 shadow-card sm:p-6 xl:sticky xl:top-12 xl:short:top-16 xl:col-start-2 xl:row-span-2 xl:row-start-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 id="bs-board-h" className="font-display text-2xl font-bold text-primary">Your card</h2>
@@ -365,7 +390,7 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
                 Arrow keys move between squares. Enter edits a square, typing replaces it, Delete clears it. In the editor, Enter goes to the next square, Shift+Enter to the previous one, and Escape returns to the card.
               </p>
               <div role="grid" aria-label={`Bingo card, ${d.size} by ${d.size}`} aria-describedby="bs-grid-help"
-                className="mx-auto grid w-full max-w-[40rem] gap-1.5 rounded-3xl bg-primary p-2 sm:gap-2 sm:p-3"
+                className="mx-auto grid w-full max-w-[max(16rem,min(40rem,calc(100dvh-20rem)))] xl:max-w-[max(16rem,min(40rem,calc(100dvh-25rem)))] gap-1.5 rounded-3xl bg-primary p-2 sm:gap-2 sm:p-3"
                 style={{ gridTemplateColumns: `repeat(${d.size}, minmax(0, 1fr))` }}>
                 {Array.from({ length: d.size }, (_, r) => (
                   <div role="row" key={r} className="contents">
@@ -402,7 +427,7 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
                               <Star className="size-5 fill-current sm:size-6" /> Free
                             </span>
                           ) : text ? (
-                            <span aria-hidden="true" className={cn("break-words px-0.5 font-semibold sm:pt-2.5", d.size === 5 ? "line-clamp-3" : "line-clamp-4")}>{text}</span>
+                            <span aria-hidden="true" className={cn("break-words px-0.5 font-semibold", d.size === 5 ? "line-clamp-3 sm:pt-2.5" : "line-clamp-3 pt-2.5 sm:line-clamp-4")}>{text}</span>
                           ) : (
                             <span aria-hidden="true" className="flex flex-col items-center gap-0.5 font-semibold">
                               <Plus className="size-4 sm:size-5" /><span className={cn(d.size === 5 && "hidden sm:inline")}>Add</span>
@@ -447,11 +472,11 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
             </fieldset>
             <fieldset disabled={disabled}>
               <legend className="mb-2 font-semibold">Timer</legend>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {DURATION_PRESETS_MIN.map((m) => (
-                  <label key={m} className="cursor-pointer">
+                  <label key={m} className="block cursor-pointer">
                     <input type="radio" name="duration" value={m} checked={d.minutes === m && minutesText === String(m)} onChange={() => pickMinutes(m)} className="peer sr-only" />
-                    <span className="inline-flex min-h-10 items-center rounded-full border-2 border-primary/15 bg-card px-3.5 font-display text-sm font-semibold text-primary transition-colors hover:border-primary/40 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-4 peer-focus-visible:ring-ring/40">
+                    <span className="flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border-2 border-primary/15 bg-card px-2 font-display text-sm font-semibold text-primary transition-colors hover:border-primary/40 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-4 peer-focus-visible:ring-ring/40">
                       {formatMinutes(m)}
                     </span>
                   </label>
@@ -474,31 +499,6 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
         </Card>
       </div>
 
-      {/* ------------------------------------------------ actions (compact, always reachable) */}
-      <div className="sticky bottom-3 z-20 rounded-3xl border bg-card/95 p-2 pl-4 shadow-card backdrop-blur">
-        {/* A validation message disappears by itself once every square is fixed. */}
-        {error && !(error.validation && problems.every((x) => x === null)) ? <p role="alert" className="mb-2 rounded-2xl bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">{error.text}</p> : null}
-        <div className="flex items-center gap-2">
-          <p className="mr-auto min-w-0 truncate text-sm font-semibold" aria-live="polite">
-            {busy === "save" ? "Saving…" : busy === "publish" ? "Publishing…" : dirty
-              ? <span className="text-brand-coral">● Unsaved<span className="hidden sm:inline"> changes</span></span>
-              : status === "new" ? <span className="text-muted-foreground">Not saved yet</span>
-              : <span className="text-brand-success">✓ {status === "lobby" ? <>Published<span className="hidden sm:inline"> · all changes saved</span></> : "Draft saved"}</span>}
-          </p>
-          {status !== "lobby" ? (
-            <Button type="button" variant="outline" size="sm" className="sm:h-11 sm:px-5 sm:text-base" disabled={disabled || (!dirty && status !== "new")} onClick={() => void save(false)}>
-              {busy === "save" ? "Saving…" : "Save draft"}
-            </Button>
-          ) : null}
-          {status === "lobby" ? (
-            <Button type="button" size="sm" className="sm:h-11 sm:px-5 sm:text-base" disabled={disabled || !dirty} onClick={() => void save(false)}>{busy === "save" ? "Saving…" : "Save changes"}</Button>
-          ) : (
-            <Button type="button" size="sm" className="sm:h-11 sm:px-5 sm:text-base" disabled={disabled} onClick={() => void save(true)}>
-              {busy === "publish" ? "Publishing…" : <><Check aria-hidden="true" /> Publish<span className="hidden sm:inline"> board</span></>}
-            </Button>
-          )}
-        </div>
-      </div>
       {status !== "new" ? (
         <div className="flex justify-end">
           <Button type="button" variant="ghost" size="sm" disabled={disabled}

@@ -58,6 +58,11 @@ Before 13–26 run [`inspect/game_pass_preflight.sql`](inspect/game_pass_preflig
 
 **Status:** generated and tested locally (`npm test`); **not yet applied** to the hosted project. The project's REST schema was empty when inspected, so nothing needs migrating or backing up.
 
+**Disposable email protection** — new accounts can't use temporary inboxes. Details and operations: "Disposable email protection" below.
+
+33. `20261112000029_disposable_email_guard.sql` — `disposable_email_domains` (active blocklist), `disposable_email_allowlist`, `disposable_email_list_versions` (snapshots), `is_disposable_email`, the Auth hook `hook_before_user_created`, and service-role `apply_disposable_email_list` / `rollback_disposable_email_list` / `disposable_email_list_status`. No existing object changes
+34. `20261112000030_disposable_email_seed.sql` — allowlist (major providers + privacy relays) and the upstream list (10,181 domains, commit `ba992a0`) as version 1; does nothing once any version exists. Revert both: [`rollback/20261112000029_30_disposable_email_revert.sql`](rollback/20261112000029_30_disposable_email_revert.sql) (turn the hook off first)
+
 ## Apply to the existing Supabase project
 
 ```bash
@@ -80,6 +85,39 @@ No CLI? Open **SQL Editor** and run the eleven files in order, one at a time.
    (or use Admin → Subscribers → Grant a Game Pass; or let the host claim the free trial).
 4. In Auth settings, keep "Confirm email" on; do not enable anonymous sign-ins (guests don't use Auth).
 5. Plan limits live in `subscription_plans`; prices in `plan_prices` (PHP and USD separately, minor units). A price becomes purchasable once its `polar_product_id` is set (Phase 3).
+
+## Disposable email protection
+New Game Master accounts can't be created with temporary inboxes (Mailinator, YOPmail, Guerrilla Mail, …). Existing accounts, sign-in, purchases and passes are unaffected.
+
+**How it works**
+- **Authoritative:** Supabase Auth calls `public.hook_before_user_created` before it creates a user, for every signup path (our form, direct Auth API calls, `signInWithOtp` with `shouldCreateUser`). A rejected signup creates no user and sends no confirmation email. Signing in never creates a user, so the hook never runs for existing accounts.
+- **Early answer:** "Create account" first asks `POST /api/auth/email-check` (rate-limited, same-origin, domain only, never logs the address), so the error appears under the email field. If the check is unavailable it answers "allowed" and the hook decides. "Sign in" never calls it.
+- **Matching:** the email's domain and each parent with ≥ 2 labels are compared **exactly**, so `x.mailinator.com` is blocked and `bringmailinator.com` is not. At each level the allowlist wins. No network requests during signup: the list lives in the database.
+- **Allowlist kinds:** `provider` (Gmail, Outlook, Yahoo, iCloud, Proton, …): an update containing one is refused as corrupt. `privacy_relay` (Apple Hide My Email, DuckDuckGo, Firefox Relay, SimpleLogin, addy.io, Proton Pass): permanent aliases, never blocked. `false_positive`: verified mistakes upstream.
+
+**Enable it (once per project, after applying 33 + 34)**
+1. Dashboard → **Authentication → Hooks** (Auth Hooks) → **Before User Created** → *Add hook*.
+2. Hook type **Postgres**, schema **public**, function **hook_before_user_created** → **Create/Enable**.
+3. Test in an incognito window at `/auth/login?mode=signup`: `you@mailinator.com` shows *"Temporary email addresses aren't supported…"* under the field, and **Authentication → Users** gets no new row. A real address still receives the confirmation link.
+4. Bypass test (no UI): `curl -X POST "$SUPABASE_URL/auth/v1/otp" -H "apikey: $PUBLISHABLE_KEY" -H 'content-type: application/json' -d '{"email":"x@mailinator.com","create_user":true}'` → HTTP 400 with the same message, no user created.
+
+The migrations grant the hook to `supabase_auth_admin` and revoke it from `anon`/`authenticated`. The hook is `security definer`, so Auth needs no table access.
+
+**Updating the list** (server key required; validation runs in the script and again in the database, and a failed check leaves the active list untouched)
+```bash
+npm run disposable:update -- --status      # active version, upstream commit, counts, stored versions
+npm run disposable:update -- --dry-run     # download + validate, apply nothing
+npm run disposable:update                  # apply as a new version
+npm run disposable:update -- --file my-list.txt   # apply a local file (one domain per line, # comments)
+npm run disposable:update -- --rollback    # back to the previous version (or --rollback <id>)
+```
+An update is refused if it has fewer than 1,000 domains, any invalid entry, is missing a sentinel (mailinator.com, guerrillamail.com, yopmail.com, 10minutemail.com), contains a `provider` domain, or shrinks the list by more than 20% (`--allow-shrink` to accept). The five most recent versions are kept for rollback. Schedule it monthly from any trusted runner (cron, GitHub Actions with `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SECRET_KEY` secrets). A failed download simply exits non-zero.
+
+**One-off changes** (SQL editor)
+- Allow a verified false positive: `insert into public.disposable_email_allowlist (domain, kind, reason) values ('example.org', 'false_positive', 'Ticket #123: real company');`
+- Block a domain before upstream lists it: add it to a file and use `--file`, or wait for upstream. Never block a whole domain because of one suspicious user.
+
+**Rollback the feature:** disable the hook in the Dashboard first, then run [`rollback/20261112000029_30_disposable_email_revert.sql`](rollback/20261112000029_30_disposable_email_revert.sql).
 
 ## Supabase Auth settings (passwordless Email OTP)
 Hosts and the Super Admin sign in with a 6-digit email code at `/auth/login` (`/admin/login` for admins). New and returning hosts use the same screen.

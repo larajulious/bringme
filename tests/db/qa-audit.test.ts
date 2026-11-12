@@ -89,7 +89,7 @@ describe("TypeScript types match the migrated schema", () => {
       });
       if (!ok) missing.push(`${name}(${args.join(",")})`);
     }
-    assert.equal(count, 69, `parsed ${count} functions (update when the types gain or lose functions)`);
+    assert.equal(count, 73, `parsed ${count} functions (update when the types gain or lose functions)`);
     assert.deepEqual(missing, []);
   });
 });

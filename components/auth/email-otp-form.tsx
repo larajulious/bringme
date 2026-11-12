@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DISPOSABLE_EMAIL_MESSAGE } from "@/lib/auth/disposable";
 import { friendlyAuthError } from "@/lib/auth/messages";
 import {
   OTP_LENGTH, PENDING_KEY, RESEND_COOLDOWN_MS, cooldownSecondsLeft, isValidEmail, normalizeEmail, parsePending, retryAfterMs,
@@ -124,6 +125,12 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
   /** One Supabase request per call. "Create account" may create the user; "Sign in" and admin never do. */
   const requestCode = async (target: string): Promise<boolean> => {
     const createUser = !isAdmin && mode === "signup";
+    // New accounts only: temporary inboxes are refused before anything is sent (the Supabase Auth hook
+    // enforces the same rule for every signup, so this is just the early, friendly answer).
+    if (createUser && (await isTemporaryEmail(target))) {
+      setError(DISPOSABLE_EMAIL_MESSAGE);
+      return false;
+    }
     const { error } = await createClient().auth.signInWithOtp({
       email: target,
       // The confirmation link must come back to THIS site's confirm route (not Supabase's Site URL,
@@ -426,6 +433,25 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Server pre-check for "Create account". Only a definite "not allowed" blocks; if the check can't be
+ * reached the signup continues and the Supabase Auth hook makes the decision.
+ */
+async function isTemporaryEmail(email: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/auth/email-check", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { allowed?: unknown };
+    return body.allowed === false;
+  } catch {
+    return false;
+  }
 }
 
 function Header({ title, description, mood }: { title: string; description: React.ReactNode; mood: "happy" | "waiting" }) {

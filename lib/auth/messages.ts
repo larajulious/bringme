@@ -1,7 +1,11 @@
+import { DISPOSABLE_EMAIL_MESSAGE } from "./disposable.ts";
+
 /** Maps Supabase auth errors to friendly, non-leaky copy. */
 export function friendlyAuthError(error: unknown): string {
-  const e = error as { code?: string; name?: string; status?: number } | null;
+  const e = error as { code?: string; name?: string; status?: number; message?: string } | null;
   if (isNetworkError(e)) return "We couldn't reach Bring Me. Check your connection and try again.";
+  // Rejected by the "Before User Created" hook (public.hook_before_user_created): a temporary inbox.
+  if (isDisposableRejection(e)) return DISPOSABLE_EMAIL_MESSAGE;
   switch (e?.code) {
     case "otp_expired":
       return "That code is incorrect or has expired. Check it, or request a new code.";
@@ -22,6 +26,10 @@ export function friendlyAuthError(error: unknown): string {
     default:
       return "Something went wrong. Please try again.";
   }
+}
+
+function isDisposableRejection(e: { message?: string } | null): boolean {
+  return typeof e?.message === "string" && e.message.includes("Temporary email addresses aren't supported");
 }
 
 function isNetworkError(e: { name?: string; status?: number } | null): boolean {

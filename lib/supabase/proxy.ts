@@ -66,7 +66,9 @@ export async function updateSession(request: NextRequest) {
     // Polar webhooks carry no session: the handler verifies the Standard Webhooks signature
     path === "/api/webhooks/polar" ||
     // Homepage tap counter: anonymous by design; throttled + rate-limited in the handler and in SQL
-    path === "/api/snappy";
+    path === "/api/snappy" ||
+    // Signup pre-check (disposable email domains): answers only "allowed or not" for a domain, rate-limited
+    path === "/api/auth/email-check";
 
   if (!user && !isPublic) {
     // Coarse gate only. Pages/handlers re-check authorization on the server.
