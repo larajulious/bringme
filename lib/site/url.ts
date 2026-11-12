@@ -4,6 +4,9 @@
  */
 export type SiteUrl = { url: string; configured: boolean };
 
+/** The public production address, used by production builds that have no NEXT_PUBLIC_SITE_URL. */
+export const PRODUCTION_SITE_URL = "https://bringme.fun";
+
 export function resolveSiteUrl(env: Record<string, string | undefined>): SiteUrl {
   const explicit = env.NEXT_PUBLIC_SITE_URL?.trim();
   if (explicit) {
@@ -18,6 +21,9 @@ export function resolveSiteUrl(env: Record<string, string | undefined>): SiteUrl
   }
   const vercel = env.VERCEL_PROJECT_PRODUCTION_URL || env.VERCEL_URL;
   if (vercel) return { url: `https://${vercel}`, configured: false };
+  // A production build must never hand out (or redirect to) localhost, e.g. behind a reverse proxy whose
+  // internal address is http://localhost:3000. Treated as configured so redirects use it, not the request origin.
+  if (env.NODE_ENV === "production") return { url: PRODUCTION_SITE_URL, configured: true };
   return { url: "http://localhost:3000", configured: false };
 }
 

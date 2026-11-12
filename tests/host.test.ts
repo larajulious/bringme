@@ -34,6 +34,12 @@ describe("site url + join url", () => {
     assert.equal(resolveSiteUrl({}).url, "http://localhost:3000");
     assert.equal(resolveSiteUrl({ VERCEL_URL: "x.vercel.app" }).url, "https://x.vercel.app");
   });
+  it("a production build without a configured URL never falls back to localhost", () => {
+    assert.deepEqual(resolveSiteUrl({ NODE_ENV: "production" }), { url: "https://bringme.fun", configured: true });
+    assert.equal(redirectBase("http://localhost:3000", { NODE_ENV: "production" }), "https://bringme.fun");
+    assert.equal(resolveSiteUrl({ NODE_ENV: "production", NEXT_PUBLIC_SITE_URL: "https://staging.example.com" }).url, "https://staging.example.com");
+    assert.equal(resolveSiteUrl({ NODE_ENV: "production", VERCEL_URL: "x.vercel.app" }).url, "https://x.vercel.app");
+  });
   it("redirects to the public URL, not the proxy-internal origin", () => {
     assert.equal(redirectBase("http://localhost:3000", { NEXT_PUBLIC_SITE_URL: "https://bringme.fun" }), "https://bringme.fun");
     assert.equal(redirectBase("http://localhost:3000", {}), "http://localhost:3000");
