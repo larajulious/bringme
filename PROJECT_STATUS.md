@@ -14,6 +14,18 @@ Real-time party game with three roles: **Super Admin** (platform owner), **Subsc
 - **Motion**: CSS-only page transition via `app/template.tsx` (`.page-enter`); global `prefers-reduced-motion` override.
 - **Routes**: `/` landing, `/play` (public player placeholder), `/auth/{login,error}` (login = unified passwordless email-code page; old sign-up/forgot/update-password URLs redirect to it) + route handlers `/auth/confirm` (email links) and `/auth/continue` (server-side role router), `/dashboard`, `/dashboard/games/new`, `/dashboard/games/[id]` (lobby), `/dashboard/subscription` (Game Master), `/play` (public room-code entry), `/join/[code]` (QR landing + name form), `/join/[code]/lobby` (player waiting lobby), `/play/[code]` (redirects to `/join/[code]`), `/admin/login` (public) and the Super Admin console: `/admin/dashboard`, `/admin/subscribers`, `/admin/subscribers/[id]`, `/admin/plans`, `/admin/settings` (`/admin` redirects). `loading.tsx`/`error.tsx` at root and per area; `not-found.tsx`.
 
+## Auth: "localhost:3000/?error=access_denied&error_code=otp_expired" in production (2026-11-12)
+- **Cause:** a sign-in email link that had expired or was already used (newer email, or an email security scanner pre-opening it) was sent by Supabase to its **Site URL**, still `http://localhost:3000` in the dashboard, because `signInWithOtp` passed no `emailRedirectTo`.
+- **Code:**
+  - `email-otp-form.tsx` passes `emailRedirectTo: <origin>/auth/confirm`, so a failed link lands on `/auth/error` of the right site;
+  - `proxy.ts` redirects any non-auth page carrying `?error_code=` to `/auth/error?error=link_invalid` (covers links already sent). Checked on a production build: `/?error_code=otp_expired` → 307 `/auth/error?error=link_invalid`, plain `/` → 200.
+- **Dashboard (manual, required):** Authentication → URL Configuration: Site URL `https://bringme.fun`; Redirect URLs `https://bringme.fun/**` and `http://localhost:3000/**`. Optionally remove `{{ .ConfirmationURL }}` from the Magic Link and Confirm signup templates (code-only sign-in; scanners can't consume a code).
+
+## Checkout: "You have several unfinished checkouts" on Continue checkout (2026-11-12)
+- **Cause:** `start_checkout_order` reused a pending order only while it was < 30 minutes old, but closed one only once its Polar checkout expired (or after 24 h). An order 30+ minutes old with a still-valid checkout was neither, so every "Continue checkout" / Buy created another order until the 3-pending limit (`too_many_pending_orders`).
+- **Fix:** migration `20261112000028_reuse_live_checkouts.sql` (**not yet applied to the hosted DB**). A live checkout (> 2 min left) for the same plan / currency / environment / product is reused for up to 24 h; one without a Polar expiry is reused for 1 h. Live checkouts are still never closed by this function, because a late payment on a closed order lands in admin review (`order_was_expired`). The host message now says what to do.
+- **Tests:** +2 in `tests/db/checkout-flow.test.ts`. Both fail without the migration and pass with it; the existing 24 h abandonment test caught and shaped the 24 h cap. `npm test` 613/613.
+
 ## BingoSnap: camera, review, confirmations (2026-11-12)
 - **Camera stuck on a black "Starting the preview…"** (`components/bingosnap/photo-capture.tsx`). Two races, both cleared only by closing and reopening:
   - (1) overlapping starts: the open effect, a visibility change (some permission prompts fire one) or a quick reopen could start the camera twice. The late start then killed or held the newer stream.

@@ -21,6 +21,12 @@ const status = async (u: string, co: string) =>
   (await as(db, user(u), () => db.query<{ s: Record<string, unknown> }>("select public.my_checkout_status($1) s", [co]))).rows[0].s;
 const soon = () => new Date(Date.now() + 30 * 60_000).toISOString();
 const passes = async (u: string) => Number((await db.query<{ n: string }>("select count(*)::text n from public.game_passes where user_id=$1", [u])).rows[0].n);
+/** Backdate an order (the guard trigger forbids it for every role, so switch it off for the fixture only). */
+const age = async (orderId: string, interval: string) => {
+  await db.query("alter table public.pass_orders disable trigger guard_pass_order");
+  await db.query(`update public.pass_orders set created_at = now() - interval '${interval}' where id=$1`, [orderId]);
+  await db.query("alter table public.pass_orders enable trigger guard_pass_order");
+};
 const orders = async (u: string) => Number((await db.query<{ n: string }>("select count(*)::text n from public.pass_orders where user_id=$1", [u])).rows[0].n);
 
 before(async () => { db = await createDb(); });
@@ -53,6 +59,29 @@ describe("idempotent checkout start", () => {
     const c = await start(u, "starter", "USD");
     assert.notEqual(c.order_id, b.order_id);
     assert.equal(c.amount_minor, 199);
+  });
+
+  it("Continue checkout on an order older than 30 minutes reuses its live checkout instead of piling up orders (migration 28)", async () => {
+    const u = await host();
+    const a = await start(u);
+    assert.equal(await attach(a.order_id, `co_old_${u}`, "https://sandbox.polar.sh/checkout/old", soon()), "ok");
+    await age(a.order_id, "45 minutes");
+    // Before the fix every press made a new order and the 4th press said "several unfinished checkouts".
+    for (let i = 0; i < 4; i++) {
+      const again = await start(u);
+      assert.deepEqual([again.order_id, again.reused, again.checkout_url], [a.order_id, true, "https://sandbox.polar.sh/checkout/old"], `press ${i + 1}`);
+    }
+    assert.equal(await orders(u), 1);
+  });
+
+  it("a checkout without an expiry from Polar is reused for an hour, then a fresh one is made", async () => {
+    const u = await host();
+    const a = await start(u);
+    assert.equal(await attach(a.order_id, `co_noexp_${u}`, "https://sandbox.polar.sh/checkout/noexp", null), "ok");
+    await age(a.order_id, "50 minutes");
+    assert.equal((await start(u)).order_id, a.order_id);
+    await age(a.order_id, "70 minutes");
+    assert.notEqual((await start(u)).order_id, a.order_id);
   });
 
   it("never reuses for a suspended account, and refuses manipulated attach URLs", async () => {

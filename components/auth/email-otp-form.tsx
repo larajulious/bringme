@@ -111,7 +111,9 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
   const requestCode = async (target: string): Promise<boolean> => {
     const { error } = await createClient().auth.signInWithOtp({
       email: target,
-      options: { shouldCreateUser: !isAdmin },
+      // If the email also contains a link, it must come back to THIS site's confirm route (not Supabase's
+      // Site URL, which may still be localhost): a used/expired link then lands on a friendly error page.
+      options: { shouldCreateUser: !isAdmin, emailRedirectTo: `${window.location.origin}/auth/confirm` },
     });
     // Admin area: an unknown email must look exactly like a known one (no enumeration, no account created).
     if (error && !(isAdmin && (error.code === "otp_disabled" || error.code === "signup_disabled"))) {

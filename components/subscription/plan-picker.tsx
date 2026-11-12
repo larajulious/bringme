@@ -33,7 +33,7 @@ export const ERRORS: Record<string, string> = {
   pricing_unavailable: "We couldn't confirm that exact price with our payment provider, so you were not sent to pay. Please try again later or choose the other currency.",
   pricing_out_of_sync: "This price is being updated, so it can't be bought right now. You have not been charged.",
   checkout_unavailable: "Checkout is not available right now. You have not been charged.",
-  too_many_pending_orders: "You have several unfinished checkouts. Please wait a moment and try again.",
+  too_many_pending_orders: "You already have 3 checkouts open. Use “Continue checkout” on one of them in your purchase history, or try again once they expire. You have not been charged.",
   checkout_in_progress: "Your checkout is still being prepared. Please try again in a few seconds.",
   unknown_plan: "That pass isn't available. Please refresh the page.",
   invalid_currency: "Please choose PHP or USD.",
