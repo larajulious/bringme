@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { CheckCircle2, DoorOpen, Gamepad2, History, Plus } from "lucide-react";
+import { CheckCircle2, ChevronRight, DoorOpen, Gamepad2, History, Plus, Sparkles, Ticket } from "lucide-react";
 
+import { Mascot } from "@/components/brand/mascot";
 import { GameLimitNotice } from "@/components/game/game-limit-notice";
 import { GameList } from "@/components/game/game-list";
 import { MetricCard } from "@/components/admin/metric-card";
-import { PageHeading } from "@/components/layout/dashboard-shell";
 import { PassStatus, passStatusCovers } from "@/components/subscription/pass-status";
 import { SubscriptionRestricted } from "@/components/subscription/restricted";
 import { Button } from "@/components/ui/button";
@@ -36,42 +36,47 @@ export default async function DashboardPage() {
   const openGames = openCount.count ?? active.length;
   const atLimit = canHost && !!entitlement && openGames >= entitlement.max_active_games;
 
+  const createButton = canHost ? (
+    atLimit ? (
+      <Button size="lg" disabled aria-describedby="game-limit-h" className="w-full sm:w-auto"><Plus aria-hidden="true" /> Create game</Button>
+    ) : (
+      <Button asChild size="lg" className="w-full sm:w-auto">
+        <Link href="/dashboard/games/new"><Plus aria-hidden="true" /> Create game</Link>
+      </Button>
+    )
+  ) : null;
+  const restricted = !canHost && !passStatusCovers(pass);
+
   return (
-    <>
-      <PageHeading
-        title={`Welcome${profile.display_name ? `, ${profile.display_name}` : ""}!`}
-        description="Ready to throw a party? Create a game and let your friends scan in."
-      />
-
-      <div className="mb-8 flex flex-wrap items-center gap-4">
-        {canHost ? (
-          atLimit ? (
-            <Button size="lg" disabled aria-describedby="game-limit-h"><Plus aria-hidden="true" /> Create game</Button>
-          ) : (
-            <Button asChild size="lg">
-              <Link href="/dashboard/games/new"><Plus aria-hidden="true" /> Create game</Link>
+    <div className="grid gap-8">
+      {/* Welcome banner: who you are + the one thing to do next. */}
+      <section aria-labelledby="welcome-h" className="relative overflow-hidden rounded-4xl bg-gradient-to-br from-primary to-brand-night p-6 text-white shadow-card sm:p-8">
+        <div className="relative z-10 max-w-3xl sm:pr-40 lg:pr-52">
+          <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">Game Master</p>
+          <h1 id="welcome-h" className="mt-1 break-words font-display text-3xl font-bold sm:text-4xl">
+            Welcome{profile.display_name ? `, ${profile.display_name}` : ""}!
+          </h1>
+          <p className="mt-2 text-base text-white/85 sm:text-lg">Ready to throw a party? Create a game and let your friends scan in.</p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            {createButton}
+            <Button asChild size="lg" variant="outline-light" className="w-full sm:w-auto">
+              <Link href="/dashboard/extra-fun"><Sparkles aria-hidden="true" /> Try BingoSnap</Link>
             </Button>
-          )
-        ) : null}
-        <Button asChild variant="ghost" size="sm"><Link href="/dashboard/subscription">Game Pass details</Link></Button>
-      </div>
+          </div>
+        </div>
+        <Mascot mood="cheer" className="pointer-events-none absolute -bottom-4 right-6 hidden w-36 sm:block lg:right-12 lg:w-44" />
+      </section>
 
-      {atLimit && entitlement ? <div className="mb-8"><GameLimitNotice active={openGames} max={entitlement.max_active_games} /></div> : null}
-
-      {passStatusCovers(pass) ? <div className="mb-8"><PassStatus summary={pass} /></div> : null}
-
-      {!canHost && !passStatusCovers(pass) ? (
+      {atLimit && entitlement ? <GameLimitNotice active={openGames} max={entitlement.max_active_games} /> : null}
+      {restricted ? (
         <SubscriptionRestricted state={access.state as Exclude<typeof access.state, "active">} supportEmail={await getSupportEmail()} trialEnded={pass?.trialEndedNoPass ?? false} />
       ) : null}
 
-      <div className="mb-8 grid grid-cols-3 gap-2 sm:mb-10 sm:gap-4">
-        <MetricCard label="Games created" value={total.count ?? 0} icon={<Gamepad2 />} />
-        <MetricCard label="Open now" value={openGames} accent="coral" icon={<DoorOpen />} hint={entitlement ? `Of ${entitlement.max_active_games} allowed` : "Drafts, lobby or live"} />
-        <MetricCard label="Completed" value={completed.count ?? 0} accent="success" icon={<CheckCircle2 />} />
-      </div>
-
-      <section aria-labelledby="active-h" className="mb-10">
-        <h2 id="active-h" className="mb-4 text-xl font-bold text-primary">Active games</h2>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        {/* Games are the main job, so they come first on phones; the pass and numbers sit beside them on lg. */}
+        <div className="grid min-w-0 gap-10">
+      <section aria-labelledby="active-h">
+        <SectionTitle id="active-h" title="Active games" count={active.length} />
         {active.length === 0 ? (
           <EmptyState
             icon={<DoorOpen />}
@@ -85,7 +90,7 @@ export default async function DashboardPage() {
       </section>
 
       <section aria-labelledby="history-h">
-        <h2 id="history-h" className="mb-4 text-xl font-bold text-primary">Game history</h2>
+        <SectionTitle id="history-h" title="Game history" count={history.length} />
         {history.length === 0 ? (
           <EmptyState icon={<History />} title="No past games yet" description="Finished and cancelled games will be listed here." />
         ) : (
@@ -98,6 +103,31 @@ export default async function DashboardPage() {
           </details>
         ) : null}
       </section>
-    </>
+        </div>
+
+        {/* Pass + numbers: above the games on phones (what can I host?), a sticky side column on lg. */}
+        <aside aria-label="Your Game Pass and stats" className="order-first grid gap-4 lg:sticky lg:top-6 lg:order-none">
+          {passStatusCovers(pass) ? <PassStatus summary={pass} /> : null}
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 lg:grid-cols-1 lg:gap-3">
+            <MetricCard label="Games created" value={total.count ?? 0} icon={<Gamepad2 />} />
+            <MetricCard label="Open now" value={openGames} accent="coral" icon={<DoorOpen />} hint={entitlement ? `Of ${entitlement.max_active_games} allowed` : "Drafts, lobby or live"} />
+            <MetricCard label="Completed" value={completed.count ?? 0} accent="success" icon={<CheckCircle2 />} />
+          </div>
+          <Link href="/dashboard/subscription" className="flex items-center justify-between gap-3 rounded-3xl border bg-card px-5 py-4 font-display font-semibold text-primary shadow-card transition-transform motion-safe:hover:-translate-y-0.5">
+            <span className="flex items-center gap-2"><Ticket aria-hidden="true" className="size-5 text-brand-coral" /> Game Pass &amp; purchases</span>
+            <ChevronRight aria-hidden="true" className="size-5" />
+          </Link>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ id, title, count }: { id: string; title: string; count: number }) {
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      <h2 id={id} className="text-xl font-bold text-primary sm:text-2xl">{title}</h2>
+      {count > 0 ? <span className="rounded-full bg-secondary px-2.5 py-0.5 text-sm font-bold text-secondary-foreground">{count}</span> : null}
+    </div>
   );
 }

@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export type LegalSection = { id: string; icon: LucideIcon; tone: string; title: string; body: React.ReactNode };
 
 /** Public support address (not a secret). Override with NEXT_PUBLIC_SUPPORT_EMAIL. */
-export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "hello@juliouslara.com";
+export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "hello@bringme.fun";
 
 /** Shared footer for public pages, with links to the legal pages. */
 export function SiteFooter() {
