@@ -6,7 +6,6 @@ import { CircleCheck, MonitorPlay } from "lucide-react";
 import { FinishedResults } from "@/components/game/finished-results";
 import { HostConsole } from "@/components/game/host-console";
 import { LobbyView } from "@/components/game/lobby-view";
-import { QrCode } from "@/components/game/qr-code";
 import { PageHeading } from "@/components/layout/dashboard-shell";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
@@ -63,10 +62,9 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
       <>
         {back}
         <LobbyView
-          gameId={game.id} title={game.title} code={game.join_code} joinUrl={url}
+          gameId={game.id} code={game.join_code} joinUrl={url}
           maxPlayers={game.max_players} roundCount={state.totalRounds} items={(rounds.data ?? []).map((r) => r.prompt)} players={roster}
           siteUrlConfigured={site.configured} initialState={state}
-          qr={<QrCode value={url} label={`QR code to join ${game.title}. Room code ${game.join_code}`} className="h-auto w-full" />}
         />
       </>
     );

@@ -1,12 +1,12 @@
 "use client";
 
-import { Expand, Minimize, Play, Users, X } from "lucide-react";
+import { Play, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Backdrop } from "@/components/brand/backdrop";
 import { fetchHostSnapshot, fetchRoster, phaseKey, runAction } from "@/components/game/host-api";
+import { OnScreenNow, bringMeOnScreen } from "@/components/game/on-screen-now";
 import { useGameSync } from "@/components/game/use-game-sync";
 import type { HostSnapshot } from "@/lib/game/types";
 import { CopyField } from "@/components/game/copy-button";
@@ -32,15 +32,13 @@ const apiErrors: Record<string, string> = {
  * Player list refreshes by polling the server every few seconds (Realtime comes later).
  */
 export function LobbyView({
-  gameId, title, code, joinUrl, maxPlayers, roundCount, items, players: initialPlayers, qr, siteUrlConfigured, initialState,
+  gameId, code, joinUrl, maxPlayers, roundCount, items, players: initialPlayers, siteUrlConfigured, initialState,
 }: {
-  gameId: string; title: string; code: string; joinUrl: string; maxPlayers: number; roundCount: number; items: string[];
-  players: LobbyPlayer[]; qr: ReactNode; siteUrlConfigured: boolean; initialState: HostSnapshot;
+  gameId: string; code: string; joinUrl: string; maxPlayers: number; roundCount: number; items: string[];
+  players: LobbyPlayer[]; siteUrlConfigured: boolean; initialState: HostSnapshot;
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const stage = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
   const [busy, setBusy] = useState<null | "start" | "cancel" | string>(null);
   const [confirm, setConfirm] = useState<null | { kind: "cancel" } | { kind: "kick"; player: LobbyPlayer }>(null);
 
@@ -58,21 +56,6 @@ export function LobbyView({
   useEffect(() => {
     if (state.status !== "lobby") router.refresh();
   }, [state.status, router]);
-
-  useEffect(() => {
-    const onChange = () => setFullscreen(document.fullscreenElement === stage.current);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
-
-  const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await stage.current?.requestFullscreen();
-    } catch {
-      toast("Fullscreen isn't available in this browser.", "error");
-    }
-  };
 
   const act = async (key: string, action: "start_game" | "cancel" | "kick", ok: string, playerId?: string) => {
     setBusy(key);
@@ -101,77 +84,14 @@ export function LobbyView({
   // chips that arrive after the first paint get the "join" animation
   const seen = useRef(new Set(initialPlayers.map((p) => p.id)));
   useEffect(() => { for (const p of players) seen.current.add(p.id); }, [players]);
-  const chips = fullscreen ? players : players.slice(0, 14);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-      {/* Presentation stage: this element goes fullscreen */}
-      <div
-        ref={stage}
-        className={cn(
-          "relative isolate overflow-hidden bg-gradient-to-b from-primary to-brand-night text-white",
-          fullscreen ? "h-viewport flex flex-col rounded-none p-[3dvh]" : "rounded-4xl p-6 sm:p-10",
-        )}
-      >
-        <Backdrop />
-        <div className={cn("flex w-full items-center justify-between gap-3", fullscreen && "absolute inset-x-0 top-0 p-6")}>
-          <Badge variant="yellow">Lobby open</Badge>
-          <Button type="button" variant="outline-light" size="sm" onClick={toggleFullscreen}>
-            {fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}
-            {fullscreen ? "Exit fullscreen" : "Present fullscreen"}
-          </Button>
-        </div>
-
-        <div className={cn(
-          fullscreen
-            ? "grid min-h-0 w-full flex-1 grid-cols-[auto_minmax(0,1fr)] grid-rows-[repeat(4,auto)_minmax(0,1fr)] content-center items-center gap-x-[5vw] gap-y-[2dvh] px-[3vw] pt-[7dvh] text-left portrait:grid-cols-1 portrait:justify-items-center portrait:text-center"
-            : "mt-2 flex flex-col items-center gap-5 text-center",
-        )}>
-          <h2 className={cn("font-display font-bold", fullscreen ? "col-start-2 text-[clamp(2.5rem,7dvh,4.5rem)] leading-tight portrait:col-start-1" : "text-3xl")}>{title}</h2>
-          <p className={cn("text-white/90", fullscreen ? "col-start-2 text-[clamp(1.25rem,3.4dvh,1.875rem)] portrait:col-start-1" : "text-lg")}>Scan to join the game</p>
-
-          {/* QR in a viewfinder frame */}
-          <div className={cn("relative", fullscreen ? "col-start-1 row-span-5 row-start-1 w-[min(74dvh,42vw)] portrait:row-span-1 portrait:row-start-auto portrait:w-[min(42dvh,80vw)]" : "w-full max-w-xs sm:max-w-sm")}>
-            <span aria-hidden="true" className="absolute -inset-3 animate-ping-soft rounded-[2rem] border-2 border-brand-yellow/40 motion-reduce:hidden" />
-            {["-left-3 -top-3 rounded-tl-3xl border-l-4 border-t-4", "-right-3 -top-3 rounded-tr-3xl border-r-4 border-t-4", "-bottom-3 -left-3 rounded-bl-3xl border-b-4 border-l-4", "-bottom-3 -right-3 rounded-br-3xl border-b-4 border-r-4"].map((c) => (
-              <span key={c} aria-hidden="true" className={cn("absolute size-10 border-brand-yellow", c)} />
-            ))}
-            <div className="rounded-3xl bg-white p-4 shadow-pop">{qr}</div>
-          </div>
-
-          {/* Room code as tiles */}
-          <div className={cn(fullscreen && "col-start-2 portrait:col-start-1")}>
-            <p className={cn("mb-2 font-semibold uppercase tracking-widest text-white/80", fullscreen ? "text-[clamp(1rem,2.4dvh,1.25rem)]" : "text-sm")}>Room code</p>
-            <p role="img" aria-label={`Room code ${code.split("").join(" ")}`} className={cn("flex gap-1.5 sm:gap-2", fullscreen ? "justify-start portrait:justify-center" : "justify-center")}>
-              {code.split("").map((ch, i) => (
-                <span key={i} aria-hidden="true" className={cn("grid place-items-center rounded-xl bg-white font-display font-bold text-primary shadow-pop", fullscreen ? "size-[min(6rem,11dvh)] text-[min(4.5rem,8dvh)]" : "size-11 text-3xl sm:size-14 sm:text-4xl")}>{ch}</span>
-              ))}
-            </p>
-          </div>
-          {fullscreen ? <p className="col-start-2 break-all font-mono text-[clamp(1rem,2.4dvh,1.25rem)] text-white/80 portrait:col-start-1">{joinUrl}</p> : null}
-
-          {/* Players arriving (fullscreen: fills what is left of the screen; extra names are clipped, the count stays exact) */}
-          <div className={cn("grid gap-3", fullscreen ? "col-start-2 min-h-0 self-stretch content-start justify-items-start overflow-hidden portrait:col-start-1 portrait:justify-items-center" : "justify-items-center")}>
-            <p className={cn("font-display font-semibold", fullscreen ? "text-[clamp(1.5rem,4.4dvh,2.25rem)]" : "text-xl")} aria-live="polite">
-              <span key={count} className="inline-block animate-pop-in text-brand-yellow">{count}</span> {count === 1 ? "player" : "players"} joined
-            </p>
-            {count > 0 ? (
-              <ul className={cn("flex max-w-5xl flex-wrap gap-2", fullscreen ? "justify-start portrait:justify-center" : "justify-center")} aria-label="Players in the lobby">
-                {chips.map((p) => (
-                  <li key={p.id} className={cn("rounded-full bg-white/15 px-4 py-1.5 font-display font-semibold", fullscreen ? "px-5 py-1.5 text-[clamp(1.125rem,3dvh,1.875rem)]" : "text-base", !seen.current.has(p.id) && "animate-join-in motion-reduce:animate-none")}>{p.nickname}</li>
-                ))}
-                {!fullscreen && count > chips.length ? <li className="rounded-full bg-white/10 px-4 py-1.5 font-display font-semibold text-white/80">+{count - chips.length} more</li> : null}
-              </ul>
-            ) : (
-              <p className="text-white/75">Waiting for the first player…</p>
-            )}
-          </div>
-        </div>
-      </div>
+    <div className="grid gap-6">
+      <OnScreenNow screen={bringMeOnScreen({ ...state, joinCode: code, playerCount: count })} />
 
       {/* Host controls */}
-      <div className="grid content-start gap-6">
-        <Card>
+      <div className="grid content-start gap-6 lg:grid-cols-2 lg:items-start">
+        <Card className="lg:row-span-2">
           <CardHeader>
             <CardTitle className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-2"><Users aria-hidden="true" className="size-5 text-primary" /> Players</span>
@@ -188,7 +108,7 @@ export function LobbyView({
             ) : null}
             {count === 0 ? (
               <p className="rounded-2xl border-2 border-dashed border-primary/25 px-4 py-6 text-center text-muted-foreground">
-                Waiting for players. Ask everyone to scan the QR code.
+                Waiting for players. Ask everyone to scan the QR code on the presenter screen.
               </p>
             ) : (
               <ul className="grid max-h-60 gap-2 overflow-y-auto" aria-label="Joined players">

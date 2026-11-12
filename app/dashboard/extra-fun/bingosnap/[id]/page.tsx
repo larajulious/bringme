@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Clock, Grid3x3, ListOrdered, Trophy, Users } from "lucide-react";
+import { Clock, Grid3x3, ListOrdered, MonitorPlay, Trophy, Users } from "lucide-react";
 
 import { BoardPreview } from "@/components/bingosnap/board-preview";
 import { BoardEditor } from "@/components/bingosnap/board-editor";
 import { BingoHostDashboard } from "@/components/bingosnap/host-dashboard";
 import { BingoHostLobby } from "@/components/bingosnap/host-lobby";
-import { QrCode } from "@/components/game/qr-code";
 import { PageHeading } from "@/components/layout/dashboard-shell";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { isUuid } from "@/lib/api/http";
 import { getMyEntitlement, requireSubscriberPage } from "@/lib/auth/session";
 import { editorInitialFrom, formatMinutes } from "@/lib/bingosnap/board";
@@ -67,7 +67,7 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
     const url = joinUrl(site.url, s.joinCode);
     return (
       <>
-        <BackLink />
+        <BackLink presentId={s.gameId} />
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant="outline">BingoSnap</Badge>
           <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -75,7 +75,6 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
         <PageHeading title={s.title} description="Your lobby is open. Players join by scanning the QR code or entering the room code. Start when everyone is in." />
         <BingoHostLobby
           initial={s} joinUrl={url} siteUrlConfigured={site.configured}
-          qr={<QrCode value={url} label={`QR code to join ${s.title}. Room code ${s.joinCode}`} className="h-auto w-full" />}
         />
       </>
     );
@@ -83,8 +82,10 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <BackLink />
+      <BackLink presentId={s.gameId} />
       {s.status === "active" || (s.status === "completed" && s.submissions.length) ? <BingoHostDashboard initial={s} /> : null}
+      {s.status === "active" ? null : (
+        <>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge variant="outline">BingoSnap</Badge>
         <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -137,14 +138,23 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
           </dl>
         </aside>
       </div>
+        </>
+      )}
     </>
   );
 }
 
-function BackLink() {
+function BackLink({ presentId }: { presentId?: string }) {
   return (
-    <p className="mb-3 text-sm">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-sm">
       <Link href="/dashboard/extra-fun" className="font-semibold text-primary underline-offset-4 hover:underline">← Extra Fun</Link>
-    </p>
+      {presentId ? (
+        <Button asChild size="sm">
+          <Link href={`/present/${presentId}`} target="_blank" rel="noopener">
+            <MonitorPlay aria-hidden="true" /> Open presenter screen<span className="sr-only"> (opens in a new window)</span>
+          </Link>
+        </Button>
+      ) : null}
+    </div>
   );
 }

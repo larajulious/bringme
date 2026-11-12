@@ -4,7 +4,9 @@ import { BadgeCheck, Check, Clock, History, Hourglass, Megaphone, RotateCcw, Tro
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { bingoOnScreen } from "@/components/bingosnap/on-screen";
 import { fetchBingoHostSnapshot } from "@/components/bingosnap/host-lobby";
+import { OnScreenNow } from "@/components/game/on-screen-now";
 import { useGameSync, useNow } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -180,6 +182,7 @@ export function BingoHostDashboard({ initial }: { initial: BingoHostSnapshot }) 
   return (
     <div className="mb-8 grid gap-4">
       <p className="sr-only" role="status" aria-live="polite">{announce}</p>
+      <OnScreenNow screen={bingoOnScreen(s, beforeHunt, over)} />
 
       {/* ----------------------------------------------------------- game facts + timer */}
       <section aria-labelledby="live-h" className="grid gap-5 rounded-4xl bg-gradient-to-b from-primary to-brand-night p-6 text-white shadow-card sm:p-8">

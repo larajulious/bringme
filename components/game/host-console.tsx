@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FinishedResults } from "@/components/game/finished-results";
 import { fetchHostSnapshot, fetchRoster, phaseKey, runAction } from "@/components/game/host-api";
 import { PhotoViewer } from "@/components/game/photo-viewer";
-import { ProjectorStage } from "@/components/game/projector-stage";
+import { OnScreenNow, bringMeOnScreen } from "@/components/game/on-screen-now";
 import { ReviewPanel, type Decision, type LiveSubmission } from "@/components/game/review-panel";
 import { useGameSync, type Conn } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
@@ -112,26 +112,42 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
   const nextNo = s.totalRounds - s.roundsRemaining + (s.phase === "lobby" ? 1 : 0);
   const started = r?.openedAt ? Date.now() + offsetMs >= Date.parse(r.openedAt) : false;
   const viewingRow = rows?.find((x) => x.submissionId === viewing) ?? null;
-  const winnerPhoto = r?.winnerPlayerId ? rows?.find((x) => x.playerId === r.winnerPlayerId)?.photoUrl ?? null : null;
 
   if (s.status === "finished" || s.status === "canceled") return <FinishedResults gameId={gameId} initial={s} />;
 
   const primary = (label: string, action: HostAction, opts: { disabled?: boolean; icon?: React.ReactNode; onClick?: () => void } = {}) => (
-    <Button size="lg" className="h-20 w-full text-2xl sm:w-auto sm:px-10" disabled={busy !== null || opts.disabled} onClick={opts.onClick ?? (() => void send(action))}>
+    <Button size="lg" className="h-16 w-full text-xl sm:w-auto sm:px-8" disabled={busy !== null || opts.disabled} onClick={opts.onClick ?? (() => void send(action))}>
       {opts.icon}{busy === action ? "Working…" : label}
     </Button>
   );
-  const finishBtn = primary("Finish game", "end_game", { icon: <Flag aria-hidden="true" className="!size-7" /> });
+  const finishBtn = primary("Finish game", "end_game", { icon: <Flag aria-hidden="true" className="!size-6" /> });
 
   let actions: React.ReactNode = null;
-  if (s.phase === "lobby") actions = s.roundsRemaining > 0 ? primary("Start countdown", "start_countdown", { icon: <Play aria-hidden="true" className="!size-7" /> }) : finishBtn;
-  else if (s.phase === "countdown") actions = primary("Start round", "start_round", { icon: <Play aria-hidden="true" className="!size-7" /> });
+  if (s.phase === "lobby") actions = s.roundsRemaining > 0 ? primary("Start countdown", "start_countdown", { icon: <Play aria-hidden="true" className="!size-6" /> }) : finishBtn;
+  else if (s.phase === "countdown") actions = primary("Start round", "start_round", { icon: <Play aria-hidden="true" className="!size-6" /> });
   else if (s.phase === "active" && r) actions = r.status === "open" ? primary("Close submissions", "close_submissions", { disabled: !started }) : primary("Move to review", "move_to_review");
   else if (s.phase === "reviewing") {
     actions = primary(confirmation.kind === "winner" ? "Declare winner…" : "Declare no winner…", "announce_winner", {
-      icon: <Trophy aria-hidden="true" className="!size-7" />, onClick: () => setConfirmWinner(true), disabled: rows === null,
+      icon: <Trophy aria-hidden="true" className="!size-6" />, onClick: () => setConfirmWinner(true), disabled: rows === null,
     });
-  } else if (s.phase === "winner_announced") actions = s.roundsRemaining > 0 ? primary("Next round", "next_round", { icon: <Play aria-hidden="true" className="!size-7" /> }) : finishBtn;
+  } else if (s.phase === "winner_announced") actions = s.roundsRemaining > 0 ? primary("Next round", "next_round", { icon: <Play aria-hidden="true" className="!size-6" /> }) : finishBtn;
+
+  const nextOnScreen: Record<string, string> = {
+    start_countdown: "Shows the 3-2-1 countdown.",
+    start_round: "Reveals the item and starts the timer.",
+    close_submissions: "Shows “Time's up” and stops new photos.",
+    move_to_review: "Shows “Judging time!”.",
+    announce_winner: "Reveals the winner (or no winner) to everyone.",
+    next_round: "Shows “Get ready!” for the next round.",
+    end_game: "Shows the final results.",
+  };
+  const stepAction: HostAction | null =
+    s.phase === "lobby" ? (s.roundsRemaining > 0 ? "start_countdown" : "end_game")
+    : s.phase === "countdown" ? "start_round"
+    : s.phase === "active" && r ? (r.status === "open" ? "close_submissions" : "move_to_review")
+    : s.phase === "reviewing" ? "announce_winner"
+    : s.phase === "winner_announced" ? (s.roundsRemaining > 0 ? "next_round" : "end_game")
+    : null;
 
   const declare = async () => {
     const winnerId = confirmation.kind === "winner" ? confirmation.leader.playerId : null;
@@ -142,20 +158,31 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
 
   return (
     <div className="grid gap-6">
-      <ProjectorStage s={s} offsetMs={offsetMs} submittedNames={(rows ?? []).map((x) => x.nickname)} winnerPhotoUrl={winnerPhoto} actions={actions} />
-
       <Card>
-        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Stat label="Round" value={r ? `${r.no} of ${s.totalRounds}` : `${Math.min(nextNo, s.totalRounds)} of ${s.totalRounds}`} />
-          <Stat label="Item to bring" value={r?.prompt ?? "—"} wide />
-          <Stat label="Players" value={String(s.playerCount)} />
-          <Stat label="Submissions" value={String(s.submissionCount)} />
-          <div className="flex items-center gap-2 text-sm font-semibold" role="status">
-            <Badge variant="yellow">{phaseLabel[s.phase]}</Badge>
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        <CardContent className="grid gap-4 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3" role="status">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{r ? `Round ${r.no} of ${s.totalRounds}` : `Round ${Math.min(nextNo, s.totalRounds)} of ${s.totalRounds}`}</Badge>
+              <Badge variant="yellow">{phaseLabel[s.phase]}</Badge>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
               <span aria-hidden="true" className={cn("size-2.5 rounded-full", conn === "live" ? "bg-emerald-500" : conn === "offline" ? "bg-brand-coral" : "bg-brand-yellow")} />
               {connText[conn]}
             </span>
+          </div>
+
+          <OnScreenNow screen={bringMeOnScreen(s)} className="border-0 bg-secondary/60 shadow-none" />
+
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="grid grid-cols-3 gap-3">
+              <Stat label="Item to bring" value={r?.prompt ?? "—"} />
+              <Stat label="Players" value={String(s.playerCount)} />
+              <Stat label="Photos in" value={String(s.submissionCount)} />
+            </div>
+            <div className="grid justify-items-stretch gap-1.5 sm:justify-items-end">
+              <div className="flex flex-wrap gap-3">{actions}</div>
+              {stepAction ? <p className="text-sm text-muted-foreground sm:text-right">Next on screen: {nextOnScreen[stepAction]}</p> : null}
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 type Player = { id: string; nickname: string };
 type Row = { nickname: string; playerId: string; photoUrl: string | null };
 
-const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Live", basic: "Live (basic)", reconnecting: "Reconnecting…", offline: "Offline" };
+export const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Live", basic: "Live (basic)", reconnecting: "Reconnecting…", offline: "Offline" };
 const IDLE_MS = 2_500;
 
 /**
@@ -97,7 +97,7 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
 }
 
 /** Fullscreen (button or "F"), idle-hiding controls/cursor, and a screen wake lock while presenting. */
-function useChrome() {
+export function useChrome() {
   const [idle, setIdle] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const timer = useRef<number | undefined>(undefined);
