@@ -63,28 +63,32 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
       : pass?.trial.eligible ? "available" : "unavailable",
   } : null;
 
+  const historyRows = (history.data ?? []) as PurchaseRow[];
+
   return (
-    <>
-      <PageHeading title="Your Game Pass" description="7-Day Game Passes: pay once, host for seven days." />
+    <div className="grid gap-12">
+      <div className="grid gap-4">
+        <PageHeading title="Your Game Pass" description="Pay once, host for seven days. No subscriptions, nothing renews." className="mb-0" />
+        {sp.checkout === "canceled" ? (
+          <Card className="border-brand-coral/40" role="status">
+            <CardContent className="pt-6">
+              <p className="font-semibold text-foreground">Checkout cancelled. You were not charged.</p>
+              <p className="text-sm text-muted-foreground">Pick a pass below whenever you&apos;re ready.</p>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
 
-      {sp.checkout === "canceled" ? (
-        <Card className="mb-8 max-w-3xl border-brand-coral/40" role="status">
-          <CardContent className="pt-6">
-            <p className="font-semibold text-foreground">Checkout cancelled. You were not charged.</p>
-            <p className="text-sm text-muted-foreground">Pick a pass below whenever you&apos;re ready.</p>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <section aria-label="Current pass" className="mb-10 max-w-4xl">
+      <section aria-labelledby="current-section-h">
+        <SectionHeader id="current-section-h" step={1} title="Your current pass" description="What you can host right now, and any passes lined up next." />
         <CurrentPass summary={pass} timeline={(timeline.data ?? []) as PassTimelineEntry[]} />
       </section>
 
-      <section id="plans" aria-labelledby="plans-h" className="mb-12 scroll-mt-24">
-        <h2 id="plans-h" className="mb-2 text-xl font-bold text-primary">Buy Game Pass</h2>
-        <p className="mb-5 max-w-2xl text-sm text-muted-foreground">
-          Buying a bigger pass starts it right away and keeps the unused days of your current one for later. The same pass again adds 7 days.
-        </p>
+      <section id="plans" aria-labelledby="plans-h" className="scroll-mt-24">
+        <SectionHeader
+          id="plans-h" step={2} title="Buy a Game Pass"
+          description="A bigger pass starts right away and saves the unused days of your current one for later. The same pass again adds 7 days."
+        />
         <PlanPicker
           plans={pickerPlans}
           trial={trial}
@@ -97,9 +101,24 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
       </section>
 
       <section aria-labelledby="history-h">
-        <h2 id="history-h" className="mb-4 text-xl font-bold text-primary">Purchase History</h2>
-        <PurchaseHistory resumeEnvironment={billing.checkout ? billing.environment : null} rows={(history.data ?? []) as PurchaseRow[]} emptyText="No purchases yet. Your free trial and passes bought here will appear in this list." />
+        <SectionHeader
+          id="history-h" step={3} title="Purchase history"
+          description={historyRows.length ? `${historyRows.length} order${historyRows.length === 1 ? "" : "s"}.` : undefined}
+        />
+        <PurchaseHistory resumeEnvironment={billing.checkout ? billing.environment : null} rows={historyRows} emptyText="No purchases yet. Your free trial and passes bought here will appear in this list." />
       </section>
-    </>
+    </div>
+  );
+}
+
+function SectionHeader({ id, step, title, description }: { id: string; step: number; title: string; description?: string }) {
+  return (
+    <header className="mb-5 flex items-start gap-3">
+      <span aria-hidden="true" className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-primary font-display text-sm font-bold text-primary-foreground">{step}</span>
+      <div>
+        <h2 id={id} className="text-xl font-bold text-primary sm:text-2xl">{title}</h2>
+        {description ? <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
+      </div>
+    </header>
   );
 }

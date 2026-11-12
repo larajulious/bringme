@@ -19,9 +19,50 @@ export function PurchaseHistory({ rows, emptyText = "No purchases yet.", resumeE
   /** Hosts only: the live Polar environment. Pending orders created in it get a "Continue checkout" button. */
   resumeEnvironment?: string | null;
 }) {
-  if (rows.length === 0) return <p className="text-muted-foreground">{emptyText}</p>;
+  if (rows.length === 0) return <p className="rounded-3xl border border-dashed bg-card px-6 py-8 text-center text-muted-foreground">{emptyText}</p>;
+
+  const status = (r: PurchaseRow, cur: ReturnType<typeof parseCurrency>) => (
+    <>
+      <Badge variant={variant(r.status)}>{ORDER_STATUS_LABEL[r.status] ?? r.status}</Badge>
+      {resumeEnvironment && r.status === "pending" && r.plan_code && r.environment === resumeEnvironment && cur
+        ? <ResumeCheckoutButton planCode={r.plan_code} currency={cur} />
+        : resumeEnvironment !== null && r.status === "pending"
+          ? <span className="mt-1 block text-xs font-normal text-muted-foreground">Started in {r.environment === "sandbox" ? "test mode" : "another environment"}. Pick the pass above to start again.</span> : null}
+    </>
+  );
+
   return (
-    <div className="min-w-0 max-w-full overflow-x-auto rounded-3xl border bg-card shadow-card">
+    <>
+    {/* Phones/tablets: one card per order instead of a sideways-scrolling table. */}
+    <ul className="grid gap-3 md:hidden" aria-label="Purchase history">
+      {rows.map((r) => {
+        const cur = parseCurrency(r.currency);
+        const shown = r.paid_amount_minor ?? r.amount_minor;
+        const refund = refundLabel(r.status, r.refunded_amount_minor);
+        return (
+          <li key={r.order_id} className="rounded-3xl border bg-card p-4 shadow-card">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold">
+                  {r.plan_name}
+                  {r.environment === "sandbox" ? <Badge variant="outline" className="ml-2">Test</Badge> : null}
+                </p>
+                <p className="text-xs text-muted-foreground"><LocalDateTime iso={r.ordered_at} /></p>
+              </div>
+              <p className="shrink-0 font-display text-lg font-bold text-primary">{cur ? formatMoney(shown, cur) : shown} <span className="text-xs font-semibold text-muted-foreground">{r.currency}</span></p>
+            </div>
+            <div className="mt-3">{status(r, cur)}</div>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div><dt className="text-xs text-muted-foreground">Activated</dt><dd>{r.activated_at ? <LocalDateTime iso={r.activated_at} /> : "—"}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">Expires</dt><dd>{r.expires_at ? <LocalDateTime iso={r.expires_at} /> : "—"}</dd></div>
+              {r.pass_state ? <div><dt className="text-xs text-muted-foreground">Pass</dt><dd>{PASS_STATE_LABEL[r.pass_state] ?? r.pass_state}</dd></div> : null}
+              {refund ? <div><dt className="text-xs text-muted-foreground">Refund</dt><dd>{refund}{r.refunded_amount_minor > 0 && cur ? ` · ${formatMoney(r.refunded_amount_minor, cur)}` : null}</dd></div> : null}
+            </dl>
+          </li>
+        );
+      })}
+    </ul>
+    <div className="hidden min-w-0 max-w-full overflow-x-auto rounded-3xl border bg-card shadow-card md:block">
       <table className="w-full min-w-[56rem] text-left text-sm">
         <caption className="sr-only">Purchase history</caption>
         <thead className="bg-secondary text-secondary-foreground">
@@ -45,12 +86,7 @@ export function PurchaseHistory({ rows, emptyText = "No purchases yet.", resumeE
                 </td>
                 <td className="px-4 py-3">{cur ? formatMoney(shown, cur) : shown}</td>
                 <td className="px-4 py-3">{r.currency}</td>
-                <td className="px-4 py-3"><Badge variant={variant(r.status)}>{ORDER_STATUS_LABEL[r.status] ?? r.status}</Badge>
-                  {resumeEnvironment && r.status === "pending" && r.plan_code && r.environment === resumeEnvironment && cur
-                    ? <ResumeCheckoutButton planCode={r.plan_code} currency={cur} />
-                    : resumeEnvironment !== null && r.status === "pending"
-                      ? <span className="mt-1 block text-xs font-normal text-muted-foreground">Started in {r.environment === "sandbox" ? "test mode" : "another environment"}. Pick the pass above to start again.</span> : null}
-                </td>
+                <td className="px-4 py-3">{status(r, cur)}</td>
                 <td className="px-4 py-3">{r.activated_at ? <LocalDateTime iso={r.activated_at} /> : "—"}</td>
                 <td className="px-4 py-3">{r.expires_at ? <LocalDateTime iso={r.expires_at} /> : "—"}</td>
                 <td className="px-4 py-3">
@@ -63,5 +99,6 @@ export function PurchaseHistory({ rows, emptyText = "No purchases yet.", resumeE
         </tbody>
       </table>
     </div>
+    </>
   );
 }

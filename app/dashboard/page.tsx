@@ -64,7 +64,7 @@ export default async function DashboardPage() {
         <SubscriptionRestricted state={access.state as Exclude<typeof access.state, "active">} supportEmail={await getSupportEmail()} trialEnded={pass?.trialEndedNoPass ?? false} />
       ) : null}
 
-      <div className="mb-10 grid gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid grid-cols-3 gap-2 sm:mb-10 sm:gap-4">
         <MetricCard label="Games created" value={total.count ?? 0} icon={<Gamepad2 />} />
         <MetricCard label="Open now" value={openGames} accent="coral" icon={<DoorOpen />} hint={entitlement ? `Of ${entitlement.max_active_games} allowed` : "Drafts, lobby or live"} />
         <MetricCard label="Completed" value={completed.count ?? 0} accent="success" icon={<CheckCircle2 />} />

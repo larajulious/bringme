@@ -41,7 +41,7 @@ export default async function ExtraFunPage() {
       <PageHeading title="Extra Fun" description="More ways to play with the same Game Pass. No extra purchase needed." />
 
       <section aria-labelledby="bingosnap-h" className="mb-10 overflow-hidden rounded-4xl border bg-card shadow-card">
-        <div className="grid gap-6 p-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-8 sm:p-8">
+        <div className="grid gap-5 p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-8 sm:p-8">
           <BingoMark className="w-28 justify-self-center sm:w-36" />
           <div className="min-w-0">
             <p className="mb-1 text-xs font-bold uppercase tracking-wide text-brand-coral">Photo Bingo</p>

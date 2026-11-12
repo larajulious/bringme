@@ -39,7 +39,7 @@ export function GameList({ games, label, pageSize = GAMES_PER_PAGE }: { games: G
           <li key={g.id}>
             <Link
               href={gameHref(g)}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border bg-card px-5 py-4 shadow-card transition-transform motion-safe:hover:-translate-y-0.5"
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-3xl border bg-card px-4 py-3.5 shadow-card sm:px-5 sm:py-4 transition-transform motion-safe:hover:-translate-y-0.5"
             >
               <span className="min-w-0">
                 <span className="block truncate font-display text-lg font-semibold text-foreground">{g.title}</span>
@@ -57,15 +57,15 @@ export function GameList({ games, label, pageSize = GAMES_PER_PAGE }: { games: G
       })}
       </ul>
       {pages > 1 ? (
-        <nav aria-label={`${label} pages`} className="mt-4 flex items-center justify-between gap-3">
-          <Button type="button" variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0}>
-            <ChevronLeft aria-hidden="true" /> Previous
+        <nav aria-label={`${label} pages`} className="mt-4 flex items-center justify-between gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0} aria-label="Previous page">
+            <ChevronLeft aria-hidden="true" /> <span className="hidden sm:inline">Previous</span>
           </Button>
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            Page {page + 1} of {pages} · {games.length} games
+          <p className="text-center text-sm text-muted-foreground" aria-live="polite">
+            Page {page + 1} of {pages}<span className="hidden sm:inline"> · {games.length} games</span>
           </p>
-          <Button type="button" variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= pages - 1}>
-            Next <ChevronRight aria-hidden="true" />
+          <Button type="button" variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= pages - 1} aria-label="Next page">
+            <span className="hidden sm:inline">Next</span> <ChevronRight aria-hidden="true" />
           </Button>
         </nav>
       ) : null}

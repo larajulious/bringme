@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { Mascot } from "@/components/brand/mascot";
-import { Feature, TAGLINE } from "@/components/marketing/pricing-cards";
+import { Feature, PLAN_CELL, PLAN_ROW, TAGLINE } from "@/components/marketing/pricing-cards";
 import { StartTrialButton } from "@/components/subscription/start-trial-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,17 +94,18 @@ export function PlanPicker({
 
   return (
     <div className="grid gap-5">
-      <p className="rounded-2xl bg-brand-yellow/30 px-4 py-3 text-center font-display text-lg font-semibold text-brand-night">{PASS_TERMS_SENTENCE}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-brand-yellow/30 px-4 py-3">
+      <p className="font-display font-semibold text-brand-night">{PASS_TERMS_SENTENCE}</p>
 
       {offered.length > 1 ? (
-        <fieldset className="flex flex-wrap items-center gap-3">
+        <fieldset className="flex flex-wrap items-center gap-2">
           <legend className="sr-only">Currency</legend>
           <span aria-hidden="true" className="text-sm font-semibold text-primary">Pay in</span>
           {offered.map((c) => (
             <label
               key={c}
               className={cn(
-                "inline-flex cursor-pointer items-center gap-2 rounded-2xl border-2 px-4 py-2 font-display font-semibold transition-colors",
+                "inline-flex cursor-pointer items-center gap-2 rounded-2xl border-2 px-3 py-1.5 font-display font-semibold transition-colors",
                 "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                 currency === c ? "border-primary bg-primary text-primary-foreground" : "border-primary/25 bg-card text-primary hover:border-primary/50",
               )}
@@ -116,6 +117,7 @@ export function PlanPicker({
           {testMode ? <Badge variant="coral">Test mode: no real charge</Badge> : null}
         </fieldset>
       ) : null}
+      </div>
 
       {busy ? (
         <p role="status" className="rounded-2xl border border-primary/30 bg-secondary px-4 py-3 text-sm font-semibold text-secondary-foreground">
@@ -126,9 +128,9 @@ export function PlanPicker({
         <p role="alert" className="rounded-2xl border border-brand-coral/40 bg-brand-coral/10 px-4 py-3 text-sm font-semibold text-foreground">{error}</p>
       ) : null}
 
-      <ul className="grid items-stretch gap-5 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+      <ul className={cn(PLAN_ROW, "pt-10")}>
         {trial ? (
-          <li>
+          <li className={PLAN_CELL}>
             <article className="flex h-full flex-col rounded-3xl border-2 border-dashed border-brand-yellow bg-card p-6 shadow-card">
               <h3 className="flex items-center gap-2 font-display text-xl font-bold text-primary"><Sparkles aria-hidden="true" className="size-5 text-brand-coral" /> Free Trial</h3>
               <p className="mt-1 text-sm text-muted-foreground">Try it with your closest teammates</p>
@@ -159,11 +161,11 @@ export function PlanPicker({
           const otherOk = checkoutEnabled && p.purchasable[other] === true;
           const hot = p.code === popular;
           return (
-            <li key={p.code}>
+            <li key={p.code} className={PLAN_CELL}>
               <article
                 className={cn(
                   "relative flex h-full flex-col rounded-3xl p-6 shadow-card",
-                  hot ? "bg-gradient-to-b from-primary to-brand-night text-white ring-4 ring-brand-yellow lg:-my-3 lg:py-9" : "border bg-card",
+                  hot ? "bg-gradient-to-b from-primary to-brand-night text-white ring-4 ring-brand-yellow" : "border bg-card",
                   highlight === p.code && !hot && "ring-4 ring-brand-yellow",
                 )}
               >
@@ -214,13 +216,6 @@ export function PlanPicker({
       </ul>
 
       <div id="pass-terms" className="space-y-2 text-sm text-muted-foreground">
-        <ul className="flex flex-wrap gap-2" aria-label="Purchase terms">
-          {PASS_TERMS.map((t) => (
-            <li key={t} className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 font-semibold text-secondary-foreground">
-              <Check aria-hidden="true" className="size-4" /> {t}
-            </li>
-          ))}
-        </ul>
         {anyBuyable ? (
           <p>You&apos;ll be charged in {currency}. If our payment provider can&apos;t confirm exactly this price, you won&apos;t be sent to pay.</p>
         ) : (

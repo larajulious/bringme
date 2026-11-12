@@ -14,9 +14,9 @@ const days = (s: number) => Math.round((s / 86_400) * 10) / 10;
 
 function Row({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3 [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-primary">
+    <div className="flex items-start gap-3 rounded-2xl bg-secondary/60 p-4 [&_svg]:mt-0.5 [&_svg]:size-5 [&_svg]:shrink-0 [&_svg]:text-primary">
       {icon}
-      <div><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="font-semibold text-foreground">{children}</dd></div>
+      <div className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-0.5 font-semibold text-foreground">{children}</dd></div>
     </div>
   );
 }
@@ -61,7 +61,7 @@ export function CurrentPass({ summary, timeline }: { summary: GamePassSummary | 
         </div>
       </CardHeader>
       <CardContent className="grid gap-6">
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Row icon={<Users aria-hidden="true" />} label="Maximum players">{s.maxPlayers} per game</Row>
           {s.passStartedAt ? <Row icon={<CalendarClock aria-hidden="true" />} label="Activated"><LocalDateTime iso={s.passStartedAt} /></Row> : null}
           {s.passEndsAt ? <Row icon={<Hourglass aria-hidden="true" />} label="Expires on"><LocalDateTime iso={s.passEndsAt} /></Row> : null}
@@ -73,24 +73,26 @@ export function CurrentPass({ summary, timeline }: { summary: GamePassSummary | 
 
         {upcoming.length ? (
           <div>
-            <h3 className="mb-2 font-display text-base font-semibold text-primary">Queued passes</h3>
+            <h3 className="mb-2 font-display text-base font-semibold text-primary">Up next ({upcoming.length})</h3>
             <ul className="divide-y rounded-2xl border text-sm">
               {upcoming.map((t) => (
-                <li key={t.pass_id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-                  <span className="font-semibold">{t.plan_name} · {t.max_players} players</span>
-                  <span className="text-muted-foreground">
-                    {t.state === "queued" && t.first_start ? <>Starts <LocalDateTime iso={t.first_start} /></> : `${days(t.remaining_seconds)} days left, resumes after the current pass`}
-                  </span>
-                  <Badge variant="secondary">{PASS_STATE_LABEL[t.state] ?? t.state}</Badge>
+                <li key={t.pass_id} className="grid gap-1 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-4">
+                  <div>
+                    <p className="font-semibold">{t.plan_name} · {t.max_players} players</p>
+                    <p className="text-muted-foreground">
+                      {t.state === "queued" && t.first_start ? <>Starts <LocalDateTime iso={t.first_start} /></> : `${days(t.remaining_seconds)} days left, resumes after the current pass`}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="justify-self-start sm:justify-self-end">{PASS_STATE_LABEL[t.state] ?? t.state}</Badge>
                 </li>
               ))}
             </ul>
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-3">
-          <Button asChild><Link href={PLANS}>Upgrade Pass</Link></Button>
-          <Button asChild variant="outline"><Link href={PLANS}>Purchase Again</Link></Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+          <p className="text-sm text-muted-foreground">Need more players or more days? Upgrade or extend below.</p>
+          <Button asChild><Link href={PLANS}>Upgrade or extend</Link></Button>
         </div>
       </CardContent>
     </Card>

@@ -12,6 +12,13 @@ import { formatMoney, type CheckoutCurrency } from "@/lib/billing/currency";
 import type { PublicCatalog } from "@/lib/billing/public-plans";
 import { cn } from "@/lib/utils";
 
+/**
+ * Plan card row: centered and wrapping, so 2 or 3 cards (a plan or the trial switched off) sit in the middle
+ * instead of hugging the left of a fixed 4-column grid. Widths match that grid (gap-5 = 1.25rem).
+ */
+export const PLAN_ROW = "flex flex-wrap items-stretch justify-center gap-5";
+export const PLAN_CELL = "w-full sm:w-[calc((100%_-_1.25rem)/2)] lg:w-[calc((100%_-_3.75rem)/4)]";
+
 export const TAGLINE: Record<string, string> = {
   starter: "Team huddles and small teams",
   party: "Department parties and team building",
@@ -50,9 +57,9 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
         </div>
       ) : null}
 
-      <ul className="grid items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <ul className={PLAN_ROW}>
         {catalog.trial ? (
-          <li className="reveal-item" style={{ "--i": 2 } as React.CSSProperties}>
+          <li className={cn("reveal-item", PLAN_CELL)} style={{ "--i": 2 } as React.CSSProperties}>
             <article className="flex h-full flex-col rounded-3xl border-2 border-dashed border-brand-yellow bg-card p-6 shadow-card transition-transform duration-300 motion-safe:hover:-translate-y-1.5">
               <h3 className="flex items-center gap-2 font-display text-xl font-bold text-primary"><Sparkles aria-hidden="true" className="size-5 text-brand-coral" /> Free Trial</h3>
               <p className="mt-1 text-sm text-muted-foreground">Try it with your closest teammates</p>
@@ -75,7 +82,7 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
           const price = p.prices[currency];
           const hot = p.code === popular;
           return (
-            <li key={p.code} className="reveal-item" style={{ "--i": i + 3 } as React.CSSProperties}>
+            <li key={p.code} className={cn("reveal-item", PLAN_CELL)} style={{ "--i": i + 3 } as React.CSSProperties}>
               <article
                 className={cn(
                   "relative flex h-full flex-col rounded-3xl p-6 shadow-card transition-transform duration-300 motion-safe:hover:-translate-y-1.5",

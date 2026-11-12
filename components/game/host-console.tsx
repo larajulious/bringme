@@ -244,8 +244,8 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
           <OnScreenNow screen={bringMeOnScreen(s)} className="border-0 bg-secondary/60 shadow-none" />
 
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label={r ? "Item to bring" : "Next item"} value={r?.prompt ?? roundList.find((x) => x.status === "pending")?.prompt ?? "—"} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat wide label={r ? "Item to bring" : "Next item"} value={r?.prompt ?? roundList.find((x) => x.status === "pending")?.prompt ?? "—"} />
               <Stat label="Players" value={String(s.playerCount)} />
               <Stat label="Photos in" value={String(s.submissionCount)} />
             </div>
@@ -359,7 +359,7 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
 
 function Stat({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
   return (
-    <div className={cn("min-w-0", wide && "lg:col-span-1")}>
+    <div className={cn("min-w-0", wide && "col-span-2 sm:col-span-1")}>
       <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
       <p className="truncate font-display text-xl font-bold text-primary" title={value}>{value}</p>
     </div>

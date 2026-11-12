@@ -21,13 +21,13 @@ export function MetricCard({
 }) {
   const bar = { primary: "bg-primary", success: "bg-brand-success", yellow: "bg-brand-yellow", coral: "bg-brand-coral" }[accent];
   const body = (
-    <div className="relative h-full overflow-hidden rounded-3xl border bg-card p-5 shadow-card transition-transform motion-safe:group-hover:-translate-y-0.5">
-      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1.5", bar)} />
+    <div className="relative h-full overflow-hidden rounded-2xl border bg-card p-3 pl-4 shadow-card transition-transform motion-safe:group-hover:-translate-y-0.5 sm:rounded-3xl sm:p-5">
+      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1 sm:w-1.5", bar)} />
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-muted-foreground">{label}</p>
-        {icon ? <span aria-hidden="true" className="text-primary [&_svg]:size-5">{icon}</span> : null}
+        <p className="text-xs font-semibold leading-tight text-muted-foreground sm:text-sm">{label}</p>
+        {icon ? <span aria-hidden="true" className="hidden text-primary sm:inline [&_svg]:size-5">{icon}</span> : null}
       </div>
-      <p className="mt-2 font-display text-4xl font-bold text-foreground tabular-nums">{value.toLocaleString("en-US")}</p>
+      <p className="mt-1 font-display text-2xl font-bold text-foreground tabular-nums sm:mt-2 sm:text-4xl">{value.toLocaleString("en-US")}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
