@@ -4,7 +4,9 @@ type Params = Promise<{ reason?: string; error?: string }>;
 
 const messages: Record<string, string> = {
   forbidden: "That account is not a Super Admin.",
-  link_invalid: "That link has expired, was already used, or was opened in a different browser. Enter your email below to get a new one.",
+  link_invalid: "That link isn't valid. Enter your email below to get a new one.",
+  link_expired: "That link has expired or was already used. If you already confirmed, just sign in. Otherwise enter your email below to get a new link.",
+  link_other_browser: "That older link only works in the browser you signed up in. Enter your email below to get a new one that works anywhere.",
   deactivated: "This account has been deactivated. Please contact support.",
   profile_missing: "We couldn't load your account. Please sign in again or contact support.",
   profile_lookup_failed: "We couldn't reach your account details right now. Please try again in a moment.",

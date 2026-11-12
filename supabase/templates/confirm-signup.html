@@ -3,12 +3,14 @@
   Subject: Confirm your Bring Me! account
   Supabase sends this template to a brand-new (or never-confirmed) email from the "Create account" tab.
   The app shows a "Check your email!" screen with NO code field, so this email must carry the link.
-  {{ .ConfirmationURL }} returns to the emailRedirectTo the app sends (<origin>/auth/confirm).
-  Your current hosted template already works: you only need this if you want the branded version.
+  The link MUST be the token-hash URL below, NOT {{ .ConfirmationURL }}: /auth/confirm verifies it on the server
+  with verifyOtp, so it works in any browser or device. {{ .ConfirmationURL }} uses PKCE and only works in the
+  browser that signed up. {{ .SiteURL }} = Authentication -> URL Configuration -> Site URL: the canonical host,
+  https://www.bringme.fun (the apex 308-redirects there with the query kept, so it also works).
 -->
 <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1f1147;">
   <h1 style="font-size: 22px; margin: 0 0 12px;">Confirm your email</h1>
   <p style="margin: 0 0 20px;">Click the button to verify your account and start using Bring Me!</p>
-  <p style="margin: 0 0 20px;"><a href="{{ .ConfirmationURL }}" style="display: inline-block; background: #4c1d95; color: #ffffff; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 12px;">Confirm my email</a></p>
-  <p style="font-size: 13px; color: #6b6489; margin: 0;">Open it in the same browser you signed up in. If you didn't ask for this, you can ignore this email.</p>
+  <p style="margin: 0 0 20px;"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email" style="display: inline-block; background: #4c1d95; color: #ffffff; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 12px;">Confirm my email</a></p>
+  <p style="font-size: 13px; color: #6b6489; margin: 0;">You can open it on any device. If you didn't ask for this, you can ignore this email.</p>
 </div>
