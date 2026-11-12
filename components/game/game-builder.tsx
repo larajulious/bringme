@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 import { fillItemsWithIdeas, itemSuggestions } from "@/lib/host/ideas";
 import { ITEM_MAX_LENGTH, TITLE_MAX_LENGTH } from "@/lib/host/validation";
 
@@ -130,11 +131,19 @@ export function GameBuilder({ maxRounds, defaultRounds = 5 }: { maxRounds: numbe
           {items.map((item, index) => {
             const bad = invalid.includes(item.key);
             return (
-              <li key={item.key} className="flex items-start gap-2 rounded-3xl border bg-card p-3 shadow-card sm:gap-3 sm:p-4">
-                <span aria-hidden="true" className="mt-1 grid size-10 shrink-0 place-items-center rounded-2xl bg-brand-yellow font-display text-lg font-bold text-brand-night">
+              <li
+                key={item.key}
+                className={cn(
+                  "grid items-center gap-x-3 gap-y-2 rounded-3xl border bg-card p-3 shadow-card sm:p-4",
+                  // Phones: number + actions on top, full-width input, ideas below. sm+: one row, ideas under the input.
+                  "grid-cols-[auto_minmax(0,1fr)] [grid-template-areas:'num_act'_'in_in'_'tips_tips']",
+                  "sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:[grid-template-areas:'num_in_act'_'._tips_tips']",
+                )}
+              >
+                <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-2xl bg-brand-yellow font-display text-lg font-bold text-brand-night [grid-area:num]">
                   {index + 1}
                 </span>
-                <div className="grid min-w-0 flex-1 gap-1">
+                <div className="grid min-w-0 gap-1 [grid-area:in]">
                   <Label htmlFor={`item-${item.key}`} className="sr-only">Round {index + 1} item</Label>
                   <Input
                     id={`item-${item.key}`}
@@ -147,19 +156,19 @@ export function GameBuilder({ maxRounds, defaultRounds = 5 }: { maxRounds: numbe
                     aria-describedby={bad ? `item-err-${item.key}` : undefined}
                   />
                   {bad ? <p id={`item-err-${item.key}`} className="text-sm font-semibold text-destructive">Add an item for this round.</p> : null}
-                  {!item.text.trim() ? (
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Try:</span>
-                      {itemSuggestions(texts, 3, index * 7).map((idea) => (
-                        <button key={idea} type="button" disabled={busy} onClick={() => update(item.key, idea)}
-                          className="min-h-9 rounded-full bg-secondary px-3 text-left text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/40">
-                          {idea}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
-                <div className="flex shrink-0 gap-1">
+                {!item.text.trim() ? (
+                  <div className="flex flex-wrap items-center gap-1.5 [grid-area:tips]">
+                    <span className="text-sm text-muted-foreground">Try:</span>
+                    {itemSuggestions(texts, 3, index * 7).map((idea) => (
+                      <button key={idea} type="button" disabled={busy} onClick={() => update(item.key, idea)}
+                        className="min-h-9 rounded-full bg-secondary px-3 text-left text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/40">
+                        {idea}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="flex shrink-0 gap-1 justify-self-end [grid-area:act]">
                   <Button type="button" size="icon" variant="ghost" onClick={() => move(index, -1)} disabled={index === 0 || busy} aria-label={`Move round ${index + 1} up`}>
                     <ArrowUp aria-hidden="true" />
                   </Button>
@@ -174,20 +183,26 @@ export function GameBuilder({ maxRounds, defaultRounds = 5 }: { maxRounds: numbe
             );
           })}
         </ol>
-        <Button type="button" variant="outline" className="mt-4" onClick={() => setCount(items.length + 1)} disabled={items.length >= maxRounds || busy}>
-          <Plus aria-hidden="true" /> Add another round
-        </Button>
-        <Button type="button" variant="ghost" className="mt-4 ml-2" onClick={fillEmpty} disabled={busy || items.every((i) => i.text.trim())}>
-          <Sparkles aria-hidden="true" /> Fill empty rounds
-        </Button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setCount(items.length + 1)} disabled={items.length >= maxRounds || busy}>
+            <Plus aria-hidden="true" /> Add round
+          </Button>
+          <Button type="button" variant="ghost" onClick={fillEmpty} disabled={busy || items.every((i) => i.text.trim())}>
+            <Sparkles aria-hidden="true" /> Fill empty rounds
+          </Button>
+        </div>
       </section>
 
       {error ? (
         <p role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 font-semibold text-destructive">{error}</p>
       ) : null}
-      <div>
-        <Button type="submit" size="lg" disabled={busy} className="w-full sm:w-auto">
-          {busy ? "Creating your room…" : "Create game & open lobby"}
+      {/* Always in reach, like the BingoSnap editor's save bar. */}
+      <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-3xl border bg-card/95 p-2 pl-4 shadow-card backdrop-blur">
+        <p className="min-w-0 truncate text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{items.filter((i) => i.text.trim()).length} of {items.length}</span> rounds ready
+        </p>
+        <Button type="submit" disabled={busy} className="shrink-0">
+          {busy ? "Creating…" : <><span className="sm:hidden">Open lobby</span><span className="hidden sm:inline">Create game &amp; open lobby</span></>}
         </Button>
       </div>
     </form>

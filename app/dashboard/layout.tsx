@@ -6,10 +6,10 @@ import { requireSubscriberPage } from "@/lib/auth/session";
 export const metadata: Metadata = { title: "Dashboard", robots: { index: false } };
 
 const nav: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Create game", href: "/dashboard/games/new" },
-  { label: "Extra Fun", href: "/dashboard/extra-fun" },
-  { label: "Game Pass", href: "/dashboard/subscription" },
+  { label: "Dashboard", short: "Home", href: "/dashboard", icon: "home" },
+  { label: "Create game", short: "Create", href: "/dashboard/games/new", icon: "create" },
+  { label: "Extra Fun", href: "/dashboard/extra-fun", icon: "fun" },
+  { label: "Game Pass", href: "/dashboard/subscription", icon: "pass" },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

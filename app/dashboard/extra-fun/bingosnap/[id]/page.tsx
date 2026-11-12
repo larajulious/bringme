@@ -7,7 +7,7 @@ import { BoardPreview } from "@/components/bingosnap/board-preview";
 import { BoardEditor } from "@/components/bingosnap/board-editor";
 import { BingoHostDashboard } from "@/components/bingosnap/host-dashboard";
 import { BingoHostLobby } from "@/components/bingosnap/host-lobby";
-import { PageHeading } from "@/components/layout/dashboard-shell";
+import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -146,15 +146,14 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
 
 function BackLink({ presentId }: { presentId?: string }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-      <Link href="/dashboard/extra-fun" className="font-semibold text-primary underline-offset-4 hover:underline">← Extra Fun</Link>
+    <BackBar href="/dashboard/extra-fun" label="Extra Fun">
       {presentId ? (
-        <Button asChild size="sm">
+        <Button asChild size="sm" variant="secondary">
           <Link href={`/present/${presentId}`} target="_blank" rel="noopener">
-            <MonitorPlay aria-hidden="true" /> Open presenter screen<span className="sr-only"> (opens in a new window)</span>
+            <MonitorPlay aria-hidden="true" /> Presenter screen<span className="sr-only"> (opens in a new window)</span>
           </Link>
         </Button>
       ) : null}
-    </div>
+    </BackBar>
   );
 }

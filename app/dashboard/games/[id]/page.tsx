@@ -6,7 +6,7 @@ import { CircleCheck, MonitorPlay } from "lucide-react";
 import { FinishedResults } from "@/components/game/finished-results";
 import { HostConsole } from "@/components/game/host-console";
 import { LobbyView } from "@/components/game/lobby-view";
-import { PageHeading } from "@/components/layout/dashboard-shell";
+import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,19 +40,18 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
 
   const presentable = game.status === "lobby" || game.status === "live" || game.status === "finished";
   const back = (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <Link href="/dashboard" className="text-sm font-semibold text-primary underline-offset-4 hover:underline">← Dashboard</Link>
+    <BackBar href="/dashboard" label="Dashboard">
       {presentable ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="hidden text-sm text-muted-foreground sm:inline">Projecting? Players only see what they should.</span>
-          <Button asChild size="sm">
+        <>
+          <span className="hidden text-sm text-muted-foreground md:inline">Projecting? Players only see what they should.</span>
+          <Button asChild size="sm" variant="secondary">
             <Link href={`/present/${game.id}`} target="_blank" rel="noopener">
-              <MonitorPlay aria-hidden="true" /> Open presenter screen<span className="sr-only"> (opens in a new window)</span>
+              <MonitorPlay aria-hidden="true" /> Presenter screen<span className="sr-only"> (opens in a new window)</span>
             </Link>
           </Button>
-        </div>
+        </>
       ) : null}
-    </div>
+    </BackBar>
   );
 
   if (game.status === "lobby") {

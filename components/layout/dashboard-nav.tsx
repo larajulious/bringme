@@ -2,10 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import {
+  BarChart3, CirclePlus, LayoutDashboard, ListChecks, Settings, Sparkles, Ticket, Users, type LucideIcon,
+} from "lucide-react";
 
-import type { NavItem } from "@/components/layout/dashboard-shell";
+import type { NavIcon, NavItem } from "@/components/layout/dashboard-shell";
 import { cn } from "@/lib/utils";
+
+const ICONS: Record<NavIcon, LucideIcon> = {
+  home: LayoutDashboard, create: CirclePlus, fun: Sparkles, pass: Ticket,
+  users: Users, plans: ListChecks, revenue: BarChart3, settings: Settings,
+};
 
 /** The nav item whose href is the longest prefix of the current path ("/dashboard" only matches itself or deeper). */
 function activeHref(nav: NavItem[], path: string): string | undefined {
@@ -16,49 +23,85 @@ function activeHref(nav: NavItem[], path: string): string | undefined {
 }
 
 /**
- * Phones/tablets: one horizontally scrolling row (the current item is scrolled into view).
- * lg+: vertical sidebar list.
+ * `sidebar`: vertical list for lg+ screens.
+ * `tabs`: bottom tab bar for phones/tablets (icons + short labels, thumb-reachable, safe-area aware).
  */
-export function DashboardNav({ nav, label, tone }: { nav: NavItem[]; label: string; tone: "admin" | "host" }) {
-  const path = usePathname();
-  const current = activeHref(nav, path);
-  const activeRef = useRef<HTMLAnchorElement>(null);
+export function DashboardNav({ nav, label, variant }: { nav: NavItem[]; label: string; variant: "sidebar" | "tabs" }) {
+  const current = activeHref(nav, usePathname());
 
-  useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [current]);
+  if (variant === "tabs") {
+    return (
+      <nav aria-label={label} className="border-t border-white/10 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5">
+        <ul className="mx-auto flex max-w-lg">
+          {nav.map((item) => {
+            const Icon = item.icon ? ICONS[item.icon] : null;
+            const on = !!item.href && item.href === current;
+            const inner = (
+              <>
+                <span className={cn("grid h-8 w-14 place-items-center rounded-full transition-colors", on ? "bg-white/20" : "")}>
+                  {Icon ? <Icon aria-hidden="true" className="size-5" /> : null}
+                </span>
+                <span className="max-w-full truncate">{item.short ?? item.label}</span>
+              </>
+            );
+            return (
+              <li key={item.label} className="min-w-0 flex-1">
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    aria-current={on ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 font-display text-[11px] font-semibold transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow",
+                      on ? "text-brand-yellow" : "text-white/80 hover:text-white",
+                    )}
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <span className="flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 font-display text-[11px] font-semibold text-white/50">
+                    {inner}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    );
+  }
 
   return (
-    <nav aria-label={label} className="relative -mx-4 sm:-mx-5 lg:mx-0 lg:flex-1">
-      <ul className="no-scrollbar flex snap-x gap-2 overflow-x-auto px-4 sm:px-5 lg:flex-col lg:overflow-visible lg:px-0">
+    <nav aria-label={label} className="flex-1">
+      <ul className="flex flex-col gap-2">
         {nav.map((item) => {
+          const Icon = item.icon ? ICONS[item.icon] : null;
           const on = !!item.href && item.href === current;
           return (
-            <li key={item.label} className="shrink-0 snap-start">
+            <li key={item.label}>
               {item.href ? (
                 <Link
-                  ref={on ? activeRef : undefined}
                   href={item.href}
                   aria-current={on ? "page" : undefined}
                   className={cn(
-                    "flex min-h-10 items-center whitespace-nowrap rounded-2xl px-3.5 font-display text-sm font-semibold transition-colors lg:min-h-11 lg:px-4 lg:text-base",
-                    on ? "bg-white text-primary" : "bg-white/15 hover:bg-white/25",
+                    "flex min-h-11 items-center gap-3 rounded-2xl px-4 font-display font-semibold transition-colors",
+                    on ? "bg-white text-primary" : "bg-white/10 hover:bg-white/20",
                   )}
                 >
+                  {Icon ? <Icon aria-hidden="true" className="size-5 shrink-0" /> : null}
                   {item.label}
                 </Link>
               ) : (
-                <span className="flex min-h-10 items-center justify-between gap-3 whitespace-nowrap rounded-2xl px-3.5 font-display text-sm font-semibold text-white/70 lg:min-h-11 lg:px-4 lg:text-base">
+                <span className="flex min-h-11 items-center gap-3 rounded-2xl px-4 font-display font-semibold text-white/70">
+                  {Icon ? <Icon aria-hidden="true" className="size-5 shrink-0" /> : null}
                   {item.label}
-                  <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">Soon</span>
+                  <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">Soon</span>
                 </span>
               )}
             </li>
           );
         })}
       </ul>
-      {/* Edge fade: hints that the row scrolls sideways on narrow screens. */}
-      <span aria-hidden="true" className={cn("pointer-events-none absolute inset-y-0 right-0w-6 bg-gradient-to-l lg:hidden", tone === "admin" ? "from-brand-night" : "from-primary")} />
     </nav>
   );
 }

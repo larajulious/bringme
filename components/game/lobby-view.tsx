@@ -86,11 +86,11 @@ export function LobbyView({
   useEffect(() => { for (const p of players) seen.current.add(p.id); }, [players]);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <OnScreenNow screen={bringMeOnScreen({ ...state, joinCode: code, playerCount: count })} />
 
       {/* Host controls */}
-      <div className="grid content-start gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-6 lg:grid-cols-[repeat(2,minmax(0,1fr))] lg:items-start">
         <Card className="lg:row-span-2">
           <CardHeader>
             <CardTitle className="flex items-center justify-between gap-3">

@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { BoardEditor } from "@/components/bingosnap/board-editor";
-import { PageHeading } from "@/components/layout/dashboard-shell";
+import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { Badge } from "@/components/ui/badge";
 import { isUuid } from "@/lib/api/http";
 import { getMyEntitlement, requireSubscriberPage } from "@/lib/auth/session";
@@ -27,9 +26,7 @@ export default async function EditBingoCardPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <p className="mb-3 text-sm">
-        <Link href={`/dashboard/extra-fun/bingosnap/${id}`} className="font-semibold text-primary underline-offset-4 hover:underline">← Back to the lobby</Link>
-      </p>
+      <BackBar href={`/dashboard/extra-fun/bingosnap/${id}`} label="Back to the lobby" />
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge variant="outline">BingoSnap</Badge>
         <Badge variant="yellow">In lobby</Badge>

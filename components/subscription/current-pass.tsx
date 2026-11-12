@@ -14,9 +14,9 @@ const days = (s: number) => Math.round((s / 86_400) * 10) / 10;
 
 function Row({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl bg-secondary/60 p-4 [&_svg]:mt-0.5 [&_svg]:size-5 [&_svg]:shrink-0 [&_svg]:text-primary">
+    <div className="flex flex-col gap-1.5 rounded-2xl bg-secondary/60 p-3 sm:flex-row sm:items-start sm:gap-3 sm:p-4 [&_svg]:size-5 [&_svg]:shrink-0 [&_svg]:text-primary sm:[&_svg]:mt-0.5">
       {icon}
-      <div className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-0.5 font-semibold text-foreground">{children}</dd></div>
+      <div className="min-w-0"><dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</dt><dd className="mt-0.5 text-sm font-semibold text-foreground sm:text-base">{children}</dd></div>
     </div>
   );
 }
@@ -61,7 +61,7 @@ export function CurrentPass({ summary, timeline }: { summary: GamePassSummary | 
         </div>
       </CardHeader>
       <CardContent className="grid gap-6">
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <Row icon={<Users aria-hidden="true" />} label="Maximum players">{s.maxPlayers} per game</Row>
           {s.passStartedAt ? <Row icon={<CalendarClock aria-hidden="true" />} label="Activated"><LocalDateTime iso={s.passStartedAt} /></Row> : null}
           {s.passEndsAt ? <Row icon={<Hourglass aria-hidden="true" />} label="Expires on"><LocalDateTime iso={s.passEndsAt} /></Row> : null}

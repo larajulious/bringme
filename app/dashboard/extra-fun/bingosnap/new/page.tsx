@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { BoardEditor } from "@/components/bingosnap/board-editor";
 import { GameLimitNotice } from "@/components/game/game-limit-notice";
-import { PageHeading } from "@/components/layout/dashboard-shell";
+import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { SubscriptionRestricted } from "@/components/subscription/restricted";
 import { getMyAccessStatus, getMyEntitlement, getMyGamePass, requireSubscriberPage } from "@/lib/auth/session";
 import { getSupportEmail } from "@/lib/platform/settings";
@@ -11,11 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "New BingoSnap game" };
 
-const back = (
-  <p className="mb-3 text-sm">
-    <Link href="/dashboard/extra-fun" className="font-semibold text-primary underline-offset-4 hover:underline">← Extra Fun</Link>
-  </p>
-);
+const back = <BackBar href="/dashboard/extra-fun" label="Extra Fun" />;
 
 export default async function NewBingoSnapPage() {
   const { userId } = await requireSubscriberPage();

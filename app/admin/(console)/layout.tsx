@@ -6,11 +6,11 @@ import { requireAdminPage } from "@/lib/auth/session";
 export const metadata: Metadata = { title: "Super Admin", robots: { index: false } };
 
 const nav: NavItem[] = [
-  { label: "Dashboard", href: "/admin/dashboard" },
-  { label: "Subscribers", href: "/admin/subscribers" },
-  { label: "Plans", href: "/admin/plans" },
-  { label: "Revenue", href: "/admin/revenue" },
-  { label: "Settings", href: "/admin/settings" },
+  { label: "Dashboard", short: "Home", href: "/admin/dashboard", icon: "home" },
+  { label: "Subscribers", short: "Hosts", href: "/admin/subscribers", icon: "users" },
+  { label: "Plans", href: "/admin/plans", icon: "plans" },
+  { label: "Revenue", href: "/admin/revenue", icon: "revenue" },
+  { label: "Settings", href: "/admin/settings", icon: "settings" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

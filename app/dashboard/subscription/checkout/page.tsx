@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { PageHeading } from "@/components/layout/dashboard-shell";
+import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { CheckoutStatus } from "@/components/subscription/checkout-status";
 import { requireSubscriberPage } from "@/lib/auth/session";
 
@@ -13,6 +13,7 @@ export default async function CheckoutReturnPage({ searchParams }: { searchParam
   const id = typeof checkout_id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(checkout_id) ? checkout_id : null;
   return (
     <>
+      <BackBar href="/dashboard/subscription" label="Game Pass" />
       <PageHeading title="Your Game Pass purchase" description="One-time purchase · 7 days of access · No automatic renewal" />
       {id ? <CheckoutStatus checkoutId={id} /> : <p className="text-muted-foreground">This link is missing its checkout reference.</p>}
     </>
