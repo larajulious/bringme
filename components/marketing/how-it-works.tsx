@@ -139,17 +139,19 @@ const STEP_MS = 4200;
 const DESKTOP = "(min-width: 1024px)";
 
 /** The product mock for one step, on the brand-purple stage (decorative). */
-function Stage({ step, className, pill = true }: { step: number; className?: string; pill?: boolean }) {
+function Stage({ step, className, pill = true, showScene = true, stageRef }: {
+  step: number; className?: string; pill?: boolean; showScene?: boolean; stageRef?: (el: HTMLDivElement | null) => void;
+}) {
   const Scene = steps[step].scene;
   return (
-    <div aria-hidden="true" className={cn("relative isolate grid place-items-center overflow-hidden rounded-4xl bg-primary", className)}>
+    <div ref={stageRef} aria-hidden="true" className={cn("relative isolate grid place-items-center overflow-hidden rounded-4xl bg-primary", className)}>
       <span className="absolute inset-0 -z-10 opacity-[0.12] [background-image:radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:22px_22px]" />
       {pill ? (
         <span className="absolute left-5 top-5 rounded-full bg-white/15 px-3 py-1 font-display text-sm font-bold text-white">
           Step {step + 1} of {steps.length}
         </span>
       ) : null}
-      <div key={step} className="animate-pop-in motion-reduce:animate-none"><Scene /></div>
+      {showScene ? <div key={step} className="animate-pop-in motion-reduce:animate-none"><Scene /></div> : null}
     </div>
   );
 }
@@ -158,8 +160,10 @@ function Stage({ step, className, pill = true }: { step: number; className?: str
  * "How it works" as one round, start to finish: a numbered step list with a stage that shows the
  * real product for the active step. Desktop: the stage sits beside the list and plays through on
  * its own once on screen (a progress bar fills on the active step), pausing on hover / focus and
- * handing control to you as soon as you pick a step. Phones: an accordion, the stage opens right
- * under the tapped step (no autoplay, no scrolling up to see it). Reduced motion: no autoplay.
+ * handing control to you as soon as you pick a step. Phones: scroll-driven, no tapping. Every step
+ * has its own stage right under it (space reserved, so nothing jumps); each opens and plays as it
+ * scrolls into view, and the step in the middle of the screen is highlighted. Reduced motion: no
+ * autoplay, and the phone stages are simply shown.
  */
 export function HowItWorks() {
   const [active, setActive] = useState(0);
@@ -168,8 +172,44 @@ export function HowItWorks() {
   const [hiddenTab, setHiddenTab] = useState(false);
 
   const items = useRef<(HTMLLIElement | null)[]>([]);
-  // Autoplay on desktop only: on phones the stage opens inside the tapped step, and nothing should
-  // move under the reader's thumb.
+  const stages = useRef<(HTMLDivElement | null)[]>([]);
+  // Phones: which step stages have scrolled into view. `armed` stays false without JS / observers /
+  // with reduced motion, so every stage is simply shown.
+  const [armed, setArmed] = useState(false);
+  const [seen, setSeen] = useState<boolean[]>(() => steps.map(() => false));
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP);
+    if (typeof IntersectionObserver === "undefined") return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches; // highlight yes, opening effect no
+    let open: IntersectionObserver | null = null;
+    let middle: IntersectionObserver | null = null;
+    const setup = () => {
+      open?.disconnect(); middle?.disconnect(); open = middle = null;
+      if (mq.matches) { setArmed(false); return; }
+      setArmed(!still);
+      // open each stage once it is a third on screen (and keep it open: no layout jumps)
+      if (!still) open = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const i = stages.current.indexOf(e.target as HTMLDivElement);
+          if (i >= 0) setSeen((v) => (v[i] ? v : v.map((x, k) => x || k === i)));
+          open?.unobserve(e.target);
+        }
+      }, { threshold: 0.33 });
+      stages.current.forEach((el) => el && open?.observe(el));
+      // highlight the step crossing the middle of the screen
+      middle = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) setActive(items.current.indexOf(e.target as HTMLLIElement));
+      }, { rootMargin: "-45% 0px -45% 0px" });
+      items.current.forEach((el) => el && middle!.observe(el));
+    };
+    setup();
+    mq.addEventListener("change", setup);
+    return () => { open?.disconnect(); middle?.disconnect(); mq.removeEventListener("change", setup); };
+  }, []);
+
+  // Autoplay on desktop only: on phones scrolling drives the story, and nothing should move under
+  // the reader's thumb.
   const start = useCallback(() => {
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && window.matchMedia(DESKTOP).matches) setAuto(true);
   }, []);
@@ -180,15 +220,7 @@ export function HowItWorks() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
-  const pick = (i: number) => {
-    setAuto(false);
-    setActive(i);
-    // Phones: keep the opened step and its animation on screen (an earlier step just collapsed above it).
-    if (!window.matchMedia(DESKTOP).matches) {
-      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      requestAnimationFrame(() => items.current[i]?.scrollIntoView({ block: "nearest", behavior: smooth ? "smooth" : "auto" }));
-    }
-  };
+  const pick = (i: number) => { setAuto(false); setActive(i); };
 
   return (
     <Reveal
@@ -214,7 +246,7 @@ export function HowItWorks() {
             const on = active === i;
             const done = i < active;
             return (
-              <li key={s.title} ref={(el) => { items.current[i] = el; }} className="reveal-item scroll-my-4" style={{ "--i": i + 3 } as React.CSSProperties}>
+              <li key={s.title} ref={(el) => { items.current[i] = el; }} className="reveal-item" style={{ "--i": i + 3 } as React.CSSProperties}>
                 <button
                   type="button"
                   onClick={() => pick(i)}
@@ -243,8 +275,15 @@ export function HowItWorks() {
                     </span>
                   ) : null}
                 </button>
-                {/* phones: the animation opens right under the step you tapped */}
-                {on ? <Stage step={i} pill={false} className="mt-2 h-[19.5rem] lg:hidden" /> : null}
+                {/* phones: each step's animation, opening as it scrolls into view (space reserved: no jumps) */}
+                <Stage
+                  step={i} pill={false} showScene={!armed || seen[i]}
+                  stageRef={(el) => { stages.current[i] = el; }}
+                  className={cn(
+                    "mt-2 h-[19.5rem] transition-[opacity,transform] duration-500 ease-out lg:hidden",
+                    armed && !seen[i] && "scale-95 opacity-0",
+                  )}
+                />
               </li>
             );
           })}

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { lookupOwnProfile } from "@/lib/auth/profile";
 import { safeNext } from "@/lib/auth/redirect";
+import { redirectBase } from "@/lib/site/url";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -10,7 +11,8 @@ import { createClient } from "@/lib/supabase/server";
  *   ?area=admin  -> only super admins may continue; others are signed out.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin: requestOrigin } = new URL(request.url);
+  const origin = redirectBase(requestOrigin);
   const area = searchParams.get("area");
   const to = (path: string) => NextResponse.redirect(new URL(path, origin));
 

@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { parseGameInput } from "../lib/host/validation.ts";
-import { joinUrl, resolveSiteUrl } from "../lib/site/url.ts";
+import { joinUrl, redirectBase, resolveSiteUrl } from "../lib/site/url.ts";
 import { qrMatrix, qrPath, QUIET_ZONE } from "../lib/site/qr.ts";
 
 describe("parseGameInput", () => {
@@ -33,6 +33,10 @@ describe("site url + join url", () => {
     assert.equal(resolveSiteUrl({ NEXT_PUBLIC_SITE_URL: "javascript:alert(1)" }).configured, false);
     assert.equal(resolveSiteUrl({}).url, "http://localhost:3000");
     assert.equal(resolveSiteUrl({ VERCEL_URL: "x.vercel.app" }).url, "https://x.vercel.app");
+  });
+  it("redirects to the public URL, not the proxy-internal origin", () => {
+    assert.equal(redirectBase("http://localhost:3000", { NEXT_PUBLIC_SITE_URL: "https://bringme.fun" }), "https://bringme.fun");
+    assert.equal(redirectBase("http://localhost:3000", {}), "http://localhost:3000");
   });
   it("builds join links only for valid codes", () => {
     assert.equal(joinUrl("https://bringme.app", "AB12CD"), "https://bringme.app/join/AB12CD");

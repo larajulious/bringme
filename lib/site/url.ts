@@ -30,3 +30,13 @@ export function joinUrl(siteUrl: string, code: string): string {
   if (!ROOM_CODE.test(code)) throw new Error("invalid room code");
   return `${siteUrl}/join/${code}`;
 }
+
+/**
+ * Base for server-side redirects. Behind a proxy `request.url` can carry the internal
+ * address (http://localhost:3000), so prefer the configured public URL; fall back to the
+ * request origin (local dev, previews) when none is configured.
+ */
+export function redirectBase(requestOrigin: string, env: Record<string, string | undefined> = process.env): string {
+  const site = resolveSiteUrl(env);
+  return site.configured ? site.url : requestOrigin;
+}

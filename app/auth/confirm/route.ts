@@ -2,6 +2,7 @@ import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { safeNext } from "@/lib/auth/redirect";
+import { redirectBase } from "@/lib/site/url";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -10,7 +11,8 @@ import { createClient } from "@/lib/supabase/server";
  * Supports both the token_hash template and the default PKCE `code` link.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin: requestOrigin } = new URL(request.url);
+  const origin = redirectBase(requestOrigin);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const code = searchParams.get("code");
