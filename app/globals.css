@@ -279,6 +279,56 @@ html[data-fit-viewport] body {
   [data-reveal="armed"] .reveal-loop { animation-play-state: paused; }
 }
 
+/*
+ * Scroll story (components/marketing/story/*). Each section has a clipped `.story-stage` behind its content; its
+ * `.story-window` is pinned to the viewport by a native scroll-driven animation (compositor, no JS): the window
+ * starts one viewport above the stage and ends at its bottom, so it always covers exactly the screen. The engine
+ * draws the cast into every window at the same screen position, and section edges wipe between them.
+ * The cast is the Snappy mascot in its own colours (rig.ts); depth (--z: 0 far → 1 near) softens far characters
+ * slightly. Tones only set the ground-shadow colour per section.
+ */
+/* Base in the components layer so per-section utilities (e.g. `-top-3`, `-bottom-6` reaching under neighbouring edges) can extend it. */
+@layer components {
+  .story-stage {
+    position: absolute;
+    inset: 0;
+    z-index: -10;
+    overflow: clip;
+    pointer-events: none;
+    user-select: none;
+    container-type: size;
+    view-timeline: --stage block;
+    opacity: 0;
+    transition: opacity 0.8s ease-out;
+  }
+}
+.story-stage[data-ready] { opacity: 1; }
+/* The paper section's torn edges are pseudo-elements that would slice through the cast: its stage reaches over them
+ * (above the edges, below the section's content, which sits at z-2). */
+.story-stage[data-story-stage="audience"] { inset: -12px 0; z-index: 1; }
+.story-window { position: absolute; inset: 0 0 auto; height: var(--vh, 100vh); }
+.story-stage[data-mode="still"][data-story-stage="pricing"] .story-window { top: auto; bottom: 0; }
+.story-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+@keyframes story-pin { from { transform: translateY(calc(-1 * var(--vh, 100vh))); } to { transform: translateY(100cqh); } }
+@supports (animation-timeline: view()) {
+  .story-stage[data-mode="live"] .story-window {
+    animation: story-pin linear both;
+    animation-duration: 1ms;
+    animation-duration: auto;
+    animation-timeline: --stage;
+    animation-range: cover 0% cover 100%;
+  }
+}
+.story-stage[data-tone="night"] { --shadow: 266 80% 6%; --shadow-a: 0.45; --fx-line: hsl(266 60% 82% / 0.7); --fx-dust: hsl(266 45% 78% / 0.55); }
+.story-stage[data-tone="lavender"] { --shadow: 266 50% 35%; --shadow-a: 0.2; --fx-line: hsl(266 50% 78%); --fx-dust: hsl(266 45% 88%); }
+.story-stage[data-tone="paper"] { --shadow: 30 30% 30%; --shadow-a: 0.2; --fx-line: hsl(36 30% 72%); --fx-dust: hsl(38 32% 85%); }
+/* running effects, in each section's own tone: speed lines trailing the body, dust behind the back foot */
+.rig-speed { stroke: var(--fx-line); }
+.rig-dust { fill: var(--fx-dust); }
+.rig { opacity: calc((0.78 + 0.22 * var(--z, 1)) * var(--fade, 1)); }
+.story-shadow-stop { stop-color: hsl(var(--shadow)); }
+.story-shadow-stop:first-child { stop-opacity: var(--shadow-a); }
+
 /* Respect reduced-motion: kill animation, transitions and smooth scroll */
 @media (prefers-reduced-motion: reduce) {
   *,

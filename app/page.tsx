@@ -11,6 +11,8 @@ import { ExtraFun } from "@/components/marketing/extra-fun";
 import { HeroScene } from "@/components/marketing/hero-scene";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { Pricing, PricingSection, PricingSkeleton } from "@/components/marketing/pricing";
+import { StoryStage } from "@/components/marketing/story/stage";
+import { StoryDriver } from "@/components/marketing/story/story-driver";
 import { SiteFooter } from "@/components/marketing/legal-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,9 +46,10 @@ export default function Home() {
   return (
     <>
       <StructuredData />
-      <div className="paper-edge-bottom relative isolate flex min-h-svh flex-col overflow-hidden bg-gradient-to-b from-primary to-brand-night text-white">
+      <div className="paper-edge-bottom relative isolate flex min-h-svh flex-col overflow-clip bg-gradient-to-b from-primary to-brand-night text-white">
         <Backdrop />
-        <SiteHeader />
+        <StoryStage name="hero" tone="night" />
+        <SiteHeader brand={false} />
 
         <section className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-6 px-5 pb-16 pt-2 text-center md:grid-cols-[1.1fr_0.9fr] md:gap-4 md:pb-28 md:pt-12 md:text-left">
           <div className="flex flex-col items-center gap-4 sm:gap-5 md:items-start">
@@ -72,17 +75,29 @@ export default function Home() {
       </div>
 
       <main>
-        <HowItWorks />
+        {/* Scroll story: one continuous scene behind every section (decorative; see components/marketing/story). */}
+        <div className="relative isolate">
+          {/* reaches under the hero's torn edge and into the gap above the paper section, so no strip goes undrawn */}
+          <StoryStage name="how" tone="lavender" className="-bottom-6 -top-3" />
+          <HowItWorks />
+        </div>
         <Audience />
-        <ExtraFun />
-        <PricingSection>
-          <Suspense fallback={<PricingSkeleton />}>
-            <Pricing />
-          </Suspense>
-        </PricingSection>
+        <div className="relative isolate">
+          <StoryStage name="extra" tone="lavender" className="-top-6" />
+          <ExtraFun />
+        </div>
+        <div className="relative isolate">
+          <StoryStage name="pricing" tone="lavender" />
+          <PricingSection>
+            <Suspense fallback={<PricingSkeleton />}>
+              <Pricing />
+            </Suspense>
+          </PricingSection>
+        </div>
       </main>
 
       <SiteFooter />
+      <StoryDriver />
     </>
   );
 }

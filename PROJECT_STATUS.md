@@ -1,6 +1,6 @@
 # BringMe! — Project Status
 
-_Last updated: 2026-11-12 (BingoSnap Phase 10: polish; Phase 9: host validation dashboard; Phase 8: server-enforced timer + reliable submissions; Phase 7: completion engine + Submit; Phase 6: local photo capture, browser-only; BingoSnap migrations 17–21 not yet applied to the hosted DB. Earlier: Passwordless Email OTP sign-in replaces password login/sign-up; browser-checked with stubbed Supabase, **not yet run against the hosted project or a real inbox**. Earlier: admin plan edits synchronise to Polar (migration 14), not run against the Polar sandbox. **Not launch-ready**: see GAME_PASS_QA_REPORT.md blockers.)_
+_Last updated: 2026-11-13 (Homepage scroll story: Snappy runs solo; homepage header without logo. Earlier: BingoSnap Phase 10: polish; Phase 9: host validation dashboard; Phase 8: server-enforced timer + reliable submissions; Phase 7: completion engine + Submit; Phase 6: local photo capture, browser-only; BingoSnap migrations 17–21 not yet applied to the hosted DB. Earlier: Passwordless Email OTP sign-in replaces password login/sign-up; browser-checked with stubbed Supabase, **not yet run against the hosted project or a real inbox**. Earlier: admin plan edits synchronise to Polar (migration 14), not run against the Polar sandbox. **Not launch-ready**: see GAME_PASS_QA_REPORT.md blockers.)_
 
 ## Product
 Real-time party game with three roles: **Super Admin** (platform owner), **Subscriber / Game Master** (hosts games), **Player** (joins via QR, no registration).
@@ -13,6 +13,32 @@ Real-time party game with three roles: **Super Admin** (platform owner), **Subsc
 - **Brand/layout**: `components/brand/logo.tsx` (CSS wordmark), `layout/dashboard-shell.tsx` (desktop-first sidebar shell for admin/host), `layout/player-shell.tsx` (mobile-first), `layout/site-header.tsx`, `layout/error-panel.tsx`.
 - **Motion**: CSS-only page transition via `app/template.tsx` (`.page-enter`); global `prefers-reduced-motion` override.
 - **Routes**: `/` landing, `/play` (public player placeholder), `/auth/{login,error}` (login = unified passwordless email-code page; old sign-up/forgot/update-password URLs redirect to it) + route handlers `/auth/confirm` (email links) and `/auth/continue` (server-side role router), `/dashboard`, `/dashboard/games/new`, `/dashboard/games/[id]` (lobby), `/dashboard/subscription` (Game Master), `/play` (public room-code entry), `/join/[code]` (QR landing + name form), `/join/[code]/lobby` (player waiting lobby), `/play/[code]` (redirects to `/join/[code]`), `/admin/login` (public) and the Super Admin console: `/admin/dashboard`, `/admin/subscribers`, `/admin/subscribers/[id]`, `/admin/plans`, `/admin/settings` (`/admin` redirects). `loading.tsx`/`error.tsx` at root and per area; `not-found.tsx`.
+
+## Homepage: scroll story with Snappy runners (2026-11-13)
+- **Update (same day): restyled to the approved running-Snappy reference.**
+  - Slight 3/4 view: a darker side face shows on the leading side and the face sits toward travel.
+  - Lens a touch smaller and higher, making room for a big open grin with a coral tongue.
+  - Chunky deep-purple limbs come out from under the body, with round mitts and chunky feet. Shoulders at the lower body corners, so the arms never cross the face.
+  - The red stapler is held out in the front hand, with yellow action marks. Stronger lean and longer stride.
+  - While running only, scaled by actual speed: speed lines trail the body and dust puffs kick up behind the back foot, in each section's tone.
+  - Fix: the `.story-stage` base rule moved into `@layer components`. It had been overriding the `-top-3`, `-bottom-6` and `-top-6` stage extensions, which left lavender strips at section seams.
+  - Re-checked: build, lint, 24/24 controls, no overflow, 60 fps, reverse-scroll identical, hero controls clear.
+- **Update (same day): Snappy runs solo.** The Challenger has been removed: one rig per stage, no depth sorting. Its overtake beat became a solo moment: on the way back Snappy flashes a happy glance at the viewer, then digs in. The finale is Snappy alone (victory, above the footer). The lines below describing the Challenger are historical.
+- The scroll story's two runners are now **Snappy** and a **Challenger** from the same mascot family, replacing the human silhouettes. Choreography, layout pinning and the stage/engine architecture are unchanged.
+- **Characters** ([rig.ts](components/marketing/story/rig.ts)): the body is the brand mascot exactly as in `components/brand/mascot.tsx` (same shapes, colours, eyelid construction), kept front-facing so it stays recognisable in every pose. Small purple two-joint "noodle" limbs (curves through knee/elbow) and dark shoes run in profile underneath; far limbs are a deeper purple, behind the body. Animated parts: body lean, squash and stretch about the feet (volume kept), lagging camera top, pupil direction and size, eyelid (blinks, squints, the Challenger's slanted half-lid), a mouth generated from smile/open/smirk, and the flash (a soft glow on the red button for the "snap").
+  - Snappy: wide eye, big smile, flash right, light quick gait. Challenger: ~86% size, flash left, cocked brow, smirk, longer and bouncier stride with higher arm pump.
+- **Choreography** ([choreography.ts](components/marketing/story/choreography.ts)): same beats, adapted to Snappy's proportions, plus expression beats. Anticipation crouch with a determined squint; Snappy's eye goes wide when the Challenger appears; the Challenger throws a smirking glance back as it overtakes; Snappy narrows his eye and digs in; a wide-eyed brake; a flash "click" with a held beat; victory vs. a sulk. Blinks are time-based, with a different rhythm per character.
+- **Stays clear of content:** characters ghost (opacity 0.14, eased) while they pass behind a section heading or its intro line (measured by text extent). The paper section's stage now reaches over its torn edges (`z-index: 1`, content at `z-[2]`), and the How stage reaches under the hero's torn edge, so full-colour characters are never sliced at section seams. Mobile: smaller characters, calmer squash and secondary motion; the hero Snappy stays clear of the hero controls.
+- Reduced motion: still frames per section (none in How it works, where a frozen character would sit behind body text).
+- Checked: tsc, eslint, `npm run build`. Playwright:
+  - contact sheets and zoomed crops at 390/768/1440 px, compared against the `Mascot` SVG;
+  - forward vs. reverse scrolling gives identical scroll-driven geometry;
+  - hero Snappy overlaps no hero controls at 360/390/768/1440 px;
+  - 24/24 homepage controls unobstructed, no horizontal overflow;
+  - 60 fps (p95 16.7–16.8 ms, 0 long tasks, also at 4× CPU on 390 px);
+  - engine cleans up on navigation.
+  Not checked in Safari/Firefox or on a real phone.
+- Header (same day): homepage only, "Get started" replaces the header logo on the left, "Sign in" on the right (`SiteHeader brand={false}`, `AuthButton split`); Terms/Privacy keep the logo.
 
 ## Auth: disposable email protection (2026-11-12)
 - **Enforcement:** the Supabase **Before User Created** Postgres hook (`public.hook_before_user_created`, migrations 29 + 30) refuses temporary inboxes for every signup path, including direct Auth API calls. Nothing is created and no email is sent. Sign-in, existing accounts, passes and Polar are untouched.
