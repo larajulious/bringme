@@ -76,7 +76,7 @@ function PlayerGameInner({ code, initial }: { code: string; initial: PlayerSnaps
   const over = s.me.kicked || unauthorized || s.status === "finished" || s.status === "canceled";
 
   // Camera: frames flow only around rounds; released when the game is over.
-  const roundLive = s.phase === "countdown" || s.phase === "active";
+  const roundLive = s.phase === "countdown" || (s.phase === "active" && s.round?.status !== "closed");
   useEffect(() => { cam.setActive(roundLive); }, [cam, roundLive, cam.stream]);
   useEffect(() => { if (over) cam.stop(); }, [over, cam]);
   // Fresh clock samples as soon as a countdown starts, so the capture timer starts from a good estimate.

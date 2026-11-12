@@ -148,6 +148,11 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
   const limitLeftMs = r.openedAt ? openedMs + r.timeLimitSeconds * 1000 - (now + offsetMs) : 0;
   const timeUp = r.status === "closed" || limitLeftMs <= 0;
   const busy = flowState.kind === "preparing" || flowState.kind === "uploading";
+  const roundClosed = r.status === "closed"; // the Game Master pressed "Stop photos": the camera is released (see player-game)
+  // When time is up with no photo, the timer stops at the moment photos stopped (or the limit, whichever came first).
+  const limitMs = r.timeLimitSeconds * 1000;
+  const closedAtMs = r.closedAt ? Date.parse(r.closedAt) - openedMs : limitMs;
+  const stoppedMs = timeUp && !done && !busy && flowState.kind !== "failed" ? Math.max(0, Math.min(limitMs, closedAtMs)) : null;
   const canCapture = cam.status === "ready" && hasFrames && !done && !busy && !timeUp && flowState.kind === "idle";
 
   // Live SS.mmm timer drawn straight into the DOM (60 fps without re-rendering React); frozen after the tap.
@@ -155,6 +160,7 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
     const el = timerRef.current;
     if (!el) return;
     if (finalMs !== null) { el.textContent = formatElapsed(finalMs); return; }
+    if (stoppedMs !== null) { el.textContent = formatElapsed(stoppedMs); return; }
     let raf = 0;
     const tick = () => {
       const e = clock.elapsedSince(openedMs, performance.now()) ?? Date.now() + offsetMs - openedMs;
@@ -163,7 +169,7 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [finalMs, clock, openedMs, offsetMs]);
+  }, [finalMs, stoppedMs, clock, openedMs, offsetMs]);
 
   const capture = () => {
     // 1) the very first thing: take the monotonic timestamp of the tap
@@ -216,7 +222,7 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
         </div>
         <div className="shrink-0 text-right">
           <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-white/70">
-            <span aria-hidden="true" className={cn("size-2 rounded-full bg-brand-coral", finalMs === null && "animate-pulse motion-reduce:animate-none")} /> Elapsed
+            <span aria-hidden="true" className={cn("size-2 rounded-full bg-brand-coral", finalMs === null && stoppedMs === null && "animate-pulse motion-reduce:animate-none")} /> Elapsed
           </p>
           <p ref={timerRef} role="timer" aria-label="Elapsed time" className="rounded-2xl bg-white/10 px-3 py-1 font-mono text-3xl font-bold tabular-nums tiny:text-2xl">00.000</p>
           <p className="mt-1 text-xs text-white/60" role="status">{connection}</p>
@@ -224,13 +230,15 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
       </header>
 
       <div className="relative mx-3 min-h-0 overflow-hidden rounded-3xl bg-neutral-900 landscape:tiny:mb-3 landscape:tiny:mr-0">
-        {cam.status === "ready" ? (
+        {roundClosed ? (
+          <div aria-hidden="true" className="h-full w-full bg-brand-night" />
+        ) : cam.status === "ready" ? (
           <CameraPreview onVideo={setVideoEl} onFrames={setHasFrames} />
         ) : (
           <div className="grid h-full place-items-center overflow-y-auto p-4"><CameraGate compact /></div>
         )}
 
-        {cam.status === "ready" && !done && !failed && !busy ? <Viewfinder /> : null}
+        {cam.status === "ready" && !roundClosed && !done && !failed && !busy ? <Viewfinder /> : null}
         {flash > 0 ? <span key={flash} aria-hidden="true" className="pointer-events-none absolute inset-0 animate-shutter-flash bg-white motion-reduce:hidden" /> : null}
 
         {busy ? (
