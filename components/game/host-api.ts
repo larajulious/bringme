@@ -21,6 +21,12 @@ export async function fetchRoster(gameId: string): Promise<{ id: string; nicknam
   return error ? null : data;
 }
 
+/** The game's rounds (RLS: the owner only), so the host can see the NEXT item before the round starts. */
+export async function fetchRounds(gameId: string): Promise<{ round_no: number; prompt: string; status: string }[] | null> {
+  const { data, error } = await createClient().from("game_rounds").select("round_no, prompt, status").eq("game_id", gameId).order("round_no", { ascending: true });
+  return error ? null : data;
+}
+
 export type TransitionResult = { ok: true; state: HostSnapshot } | { ok: false; error: string };
 
 export async function postTransition(gameId: string, action: HostAction, expectedVersion: number, winnerPlayerId?: string | null): Promise<TransitionResult> {

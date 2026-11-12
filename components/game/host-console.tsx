@@ -4,7 +4,7 @@ import { Flag, Hourglass, Play, Plus, RotateCcw, Trophy, Users } from "lucide-re
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
-import { fetchHostSnapshot, fetchRoster, phaseKey, runAction } from "@/components/game/host-api";
+import { fetchHostSnapshot, fetchRoster, fetchRounds, phaseKey, runAction } from "@/components/game/host-api";
 import { PhotoViewer } from "@/components/game/photo-viewer";
 import { OnScreenNow, bringMeOnScreen } from "@/components/game/on-screen-now";
 import { ReviewPanel, type Decision, type LiveSubmission } from "@/components/game/review-panel";
@@ -57,12 +57,20 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
   const [rowsError, setRowsError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [roundList, setRoundList] = useState<{ round_no: number; prompt: string; status: string }[]>([]);
   const [newItem, setNewItem] = useState("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let live = true;
     void fetchRoster(gameId).then((r) => { if (live && r) setPlayers(r); });
+    return () => { live = false; };
+  }, [gameId, s.version]);
+
+  // Upcoming items: refreshed on every state change (a round was added, or the game moved on).
+  useEffect(() => {
+    let live = true;
+    void fetchRounds(gameId).then((x) => { if (live && x) setRoundList(x); });
     return () => { live = false; };
   }, [gameId, s.version]);
 
@@ -237,7 +245,7 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
 
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="grid grid-cols-3 gap-3">
-              <Stat label="Item to bring" value={r?.prompt ?? "—"} />
+              <Stat label={r ? "Item to bring" : "Next item"} value={r?.prompt ?? roundList.find((x) => x.status === "pending")?.prompt ?? "—"} />
               <Stat label="Players" value={String(s.playerCount)} />
               <Stat label="Photos in" value={String(s.submissionCount)} />
             </div>
