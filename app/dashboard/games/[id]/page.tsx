@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { isUuid } from "@/lib/api/http";
-import { requireSubscriberPage } from "@/lib/auth/session";
+import { getMyEntitlement, requireSubscriberPage } from "@/lib/auth/session";
 import type { HostSnapshot } from "@/lib/game/types";
 import { getSiteUrl, joinUrl } from "@/lib/site/url";
 import { createClient } from "@/lib/supabase/server";
@@ -71,11 +71,12 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   }
 
   if (game.status === "live") {
+    const maxRounds = Math.min(200, (await getMyEntitlement())?.max_rounds_per_game ?? 0);
     return (
       <>
         {back}
         <PageHeading title="Game on" description="You control every step. Players follow along on their phones." />
-        <HostConsole gameId={game.id} initial={state} initialPlayers={roster} />
+        <HostConsole gameId={game.id} initial={state} initialPlayers={roster} maxRounds={maxRounds} />
       </>
     );
   }

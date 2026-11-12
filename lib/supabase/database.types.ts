@@ -451,6 +451,11 @@ export type Database = {
         Args: { p_game: string; p_action: string; p_expected_version: number; p_winner?: string };
         Returns: Json;
       };
+      /** Host adds one round to a lobby/live game (plan round limit enforced by trigger). */
+      add_game_round: {
+        Args: { p_game: string; p_prompt: string };
+        Returns: Json;
+      };
       admin_overview: {
         Args: Record<string, never>;
         Returns: {

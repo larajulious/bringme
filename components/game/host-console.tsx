@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag, Hourglass, Play, RotateCcw, Trophy, Users } from "lucide-react";
+import { Flag, Hourglass, Play, Plus, RotateCcw, Trophy, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
@@ -12,6 +12,7 @@ import { useGameSync, type Conn } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -33,6 +34,9 @@ const errorCopy: Record<string, string> = {
   review_locked: "The winner is official, so photo decisions are locked.",
   submission_not_found: "That photo is no longer available.",
   subscription_required: "Your Game Pass isn't active. Choose a 7-Day Game Pass to continue hosting.",
+  round_limit_reached: "You've reached your plan's round limit.",
+  empty_item: "Type what players should bring.",
+  invalid_item: "That item is too long.",
   network: "Can't reach the server. Check your connection.",
   game_not_found: "This game no longer exists.",
 };
@@ -40,7 +44,7 @@ const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Liv
 
 type Row = LiveSubmission;
 
-export function HostConsole({ gameId, initial, initialPlayers }: { gameId: string; initial: HostSnapshot; initialPlayers: { id: string; nickname: string }[] }) {
+export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: { gameId: string; initial: HostSnapshot; initialPlayers: { id: string; nickname: string }[]; maxRounds?: number }) {
   const { toast } = useToast();
   const { state: s, conn, offsetMs, applyState, resync } = useGameSync<HostSnapshot>({
     gameId, role: "host", initial, fetchSnapshot: () => fetchHostSnapshot(gameId),
@@ -53,6 +57,8 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
   const [rowsError, setRowsError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [newItem, setNewItem] = useState("");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -87,6 +93,26 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
     if (result.error === "winner_mismatch") void loadRows();
     toast(errorCopy[result.error] ?? "Something went wrong. Please try again.", "error");
     return false;
+  };
+
+  const addRound = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const prompt = newItem.trim();
+    if (!prompt) return;
+    setAdding(true);
+    const res = await fetch(`/api/host/games/${gameId}/rounds`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt }),
+    }).catch(() => null);
+    setAdding(false);
+    if (res?.ok) {
+      const { state } = (await res.json()) as { state: HostSnapshot };
+      applyState(state);
+      setNewItem("");
+      toast("Round added.", "success");
+      return;
+    }
+    const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : "network";
+    toast(errorCopy[code ?? ""] ?? "Couldn't add the round. Please try again.", "error");
   };
 
   const review = async (submissionId: string, decision: Decision) => {
@@ -134,7 +160,7 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
       </>
     );
   }
-  else if (s.phase === "active" && r) actions = r.status === "open" ? primary("Close submissions", "close_submissions", { disabled: !started }) : primary("Move to review", "move_to_review");
+  else if (s.phase === "active" && r) actions = r.status === "open" ? primary("Stop photos", "close_submissions", { disabled: !started }) : primary("Start reviewing photos", "move_to_review");
   else if (s.phase === "reviewing") {
     actions = primary(confirmation.kind === "winner" ? "Declare winner…" : "Declare no winner…", "announce_winner", {
       icon: <Trophy aria-hidden="true" className="!size-6" />, onClick: () => setConfirmWinner(true), disabled: rows === null,
@@ -145,7 +171,7 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
     start_countdown: "Shows the 3-2-1 countdown.",
     restart_countdown: "Replays the 3-2-1 countdown.",
     start_round: "Reveals the item and starts the timer. Players see “Get set…” until you press it.",
-    close_submissions: "Shows “Time's up” and stops new photos.",
+    close_submissions: "Shows “Time's up” and stops new photos. You are not reviewing yet.",
     move_to_review: "Shows “Judging time!”.",
     announce_winner: "Reveals the winner (or no winner) to everyone.",
     next_round: "Shows “Get ready!” for the next round.",
@@ -159,6 +185,21 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
     : s.phase === "winner_announced" ? (s.roundsRemaining > 0 ? "next_round" : "end_game")
     : null;
 
+  // Where we are in a round, so the host always knows what comes next (a round = these 4 steps).
+  const steps = ["Get ready", "Photos open", "Review photos", "Winner"];
+  const stepNow = s.phase === "lobby" || s.phase === "countdown" ? 0
+    : s.phase === "active" && r?.status === "open" ? 1
+    : s.phase === "active" || s.phase === "reviewing" ? 2
+    : 3;
+  const whatNow: Record<string, string> = {
+    start_countdown: "Press the button to show the 3-2-1 to everyone.",
+    start_round: "Press the button to show the item and start the timer.",
+    close_submissions: "Players are taking photos. When time is up, press “Stop photos”. Nothing is judged yet.",
+    move_to_review: "Photos are stopped. Next, press “Start reviewing photos” so you can approve or reject them.",
+    announce_winner: "Approve or reject the photos below, then declare the winner.",
+    next_round: "Round done. Press the button to get ready for the next one.",
+    end_game: "All rounds are done. Finish the game to show the final results.",
+  };
   const declare = async () => {
     const winnerId = confirmation.kind === "winner" ? confirmation.leader.playerId : null;
     const ok = await send("announce_winner", winnerId);
@@ -181,6 +222,17 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
             </span>
           </div>
 
+          <ol aria-label="Round progress" className="flex items-center gap-1.5 sm:gap-2">
+            {steps.map((label, i) => (
+              <li key={label} aria-current={i === stepNow ? "step" : undefined} className="flex min-w-0 flex-1 items-center gap-1.5">
+                <span className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold",
+                  i < stepNow ? "bg-primary text-primary-foreground" : i === stepNow ? "bg-brand-yellow text-brand-night ring-2 ring-primary" : "bg-secondary text-muted-foreground")}>{i < stepNow ? "✓" : i + 1}</span>
+                <span className={cn("truncate text-xs font-semibold sm:text-sm", i === stepNow ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+              </li>
+            ))}
+          </ol>
+          {stepAction ? <p className="rounded-xl bg-brand-yellow/20 px-3 py-2 text-sm font-semibold">Now: {whatNow[stepAction]}</p> : null}
+
           <OnScreenNow screen={bringMeOnScreen(s)} className="border-0 bg-secondary/60 shadow-none" />
 
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -196,6 +248,21 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
           </div>
         </CardContent>
       </Card>
+
+      {s.totalRounds < maxRounds ? (
+        <Card>
+          <CardContent className="grid gap-2 p-4 sm:p-5">
+            <form onSubmit={(e) => void addRound(e)} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="grid gap-1.5">
+                <label htmlFor="add-round" className="font-display font-semibold">Add another round</label>
+                <Input id="add-round" value={newItem} maxLength={200} onChange={(e) => setNewItem(e.target.value)} placeholder="Something blue" />
+              </div>
+              <Button type="submit" disabled={adding || newItem.trim() === ""}><Plus aria-hidden="true" />{adding ? "Adding…" : "Add round"}</Button>
+            </form>
+            <p className="text-xs text-muted-foreground">{s.totalRounds} of {maxRounds} rounds on your plan. It plays after the current rounds.</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {wantRows ? (
         <ReviewPanel rows={rows} counts={s.reviewCounts} locked={locked} busyId={busyId} error={rowsError} onReview={review} onOpen={(x) => setViewing(x.submissionId)} />
