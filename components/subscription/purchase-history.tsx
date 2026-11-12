@@ -1,10 +1,11 @@
+import { ResumeCheckoutButton } from "@/components/subscription/resume-checkout-button";
 import { LocalDateTime } from "@/components/subscription/remaining-time";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney, parseCurrency } from "@/lib/billing/currency";
 import { ORDER_STATUS_LABEL, PASS_STATE_LABEL, refundLabel } from "@/lib/game-pass/ui";
 
 export type PurchaseRow = {
-  order_id: string; ordered_at: string; plan_name: string; currency: string; amount_minor: number;
+  order_id: string; plan_code?: string; ordered_at: string; plan_name: string; currency: string; amount_minor: number;
   paid_amount_minor: number | null; refunded_amount_minor: number; status: string; environment: string | null;
   pass_state: string | null; activated_at: string | null; expires_at: string | null;
 };
@@ -13,7 +14,11 @@ const variant = (status: string) =>
   status === "paid" ? "success" : status === "refunded" || status === "failed" ? "coral" : status === "needs_review" ? "yellow" : "secondary";
 
 /** Purchase history (own orders for hosts; any host's for admins). Amounts shown in their own currency only. */
-export function PurchaseHistory({ rows, emptyText = "No purchases yet." }: { rows: PurchaseRow[]; emptyText?: string }) {
+export function PurchaseHistory({ rows, emptyText = "No purchases yet.", resumeEnvironment = null }: {
+  rows: PurchaseRow[]; emptyText?: string;
+  /** Hosts only: the live Polar environment. Pending orders created in it get a "Continue checkout" button. */
+  resumeEnvironment?: string | null;
+}) {
   if (rows.length === 0) return <p className="text-muted-foreground">{emptyText}</p>;
   return (
     <div className="min-w-0 max-w-full overflow-x-auto rounded-3xl border bg-card shadow-card">
@@ -40,7 +45,12 @@ export function PurchaseHistory({ rows, emptyText = "No purchases yet." }: { row
                 </td>
                 <td className="px-4 py-3">{cur ? formatMoney(shown, cur) : shown}</td>
                 <td className="px-4 py-3">{r.currency}</td>
-                <td className="px-4 py-3"><Badge variant={variant(r.status)}>{ORDER_STATUS_LABEL[r.status] ?? r.status}</Badge></td>
+                <td className="px-4 py-3"><Badge variant={variant(r.status)}>{ORDER_STATUS_LABEL[r.status] ?? r.status}</Badge>
+                  {resumeEnvironment && r.status === "pending" && r.plan_code && r.environment === resumeEnvironment && cur
+                    ? <ResumeCheckoutButton planCode={r.plan_code} currency={cur} />
+                    : resumeEnvironment !== null && r.status === "pending"
+                      ? <span className="mt-1 block text-xs font-normal text-muted-foreground">Started in {r.environment === "sandbox" ? "test mode" : "another environment"}. Pick the pass above to start again.</span> : null}
+                </td>
                 <td className="px-4 py-3">{r.activated_at ? <LocalDateTime iso={r.activated_at} /> : "—"}</td>
                 <td className="px-4 py-3">{r.expires_at ? <LocalDateTime iso={r.expires_at} /> : "—"}</td>
                 <td className="px-4 py-3">

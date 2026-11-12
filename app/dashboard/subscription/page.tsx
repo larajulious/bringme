@@ -98,7 +98,7 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
 
       <section aria-labelledby="history-h">
         <h2 id="history-h" className="mb-4 text-xl font-bold text-primary">Purchase History</h2>
-        <PurchaseHistory rows={(history.data ?? []) as PurchaseRow[]} emptyText="No purchases yet. Your free trial and passes bought here will appear in this list." />
+        <PurchaseHistory resumeEnvironment={billing.checkout ? billing.environment : null} rows={(history.data ?? []) as PurchaseRow[]} emptyText="No purchases yet. Your free trial and passes bought here will appear in this list." />
       </section>
     </>
   );
