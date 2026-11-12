@@ -27,6 +27,7 @@ export function useBoopCounter() {
   const [unsent, setUnsent] = useState(0);
   const [mine, setMine] = useState(0);
   const [offline, setOffline] = useState(false);
+  const [settled, setSettled] = useState(false); // first load finished (success or failure)
   const queue = useRef(0);       // taps not yet confirmed by the server (includes an in-flight batch)
   const inFlight = useRef(0);
   const timer = useRef<number | undefined>(undefined);
@@ -74,7 +75,8 @@ export function useBoopCounter() {
     fetch("/api/snappy")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d: { total: number }) => { if (live) setServer(d.total); })
-      .catch(() => { if (live) setOffline(true); });
+      .catch(() => { if (live) setOffline(true); })
+      .finally(() => { if (live) setSettled(true); });
     const onHide = () => { if (document.visibilityState === "hidden") void send(true); };
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", onHide);
@@ -97,5 +99,5 @@ export function useBoopCounter() {
       : window.setTimeout(() => void send(), IDLE_FLUSH_MS);
   }, [send]);
 
-  return { total: server === null ? null : server + unsent, mine, offline, tap };
+  return { total: server === null ? null : server + unsent, mine, offline, settled, tap };
 }

@@ -135,7 +135,9 @@ export function HeroScene() {
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-white" title="Boops from everyone, everywhere">
           <Hand aria-hidden="true" className="size-4" />
-          {boops.total === null ? (
+          {boops.total === null && !boops.settled ? (
+            <span aria-hidden="true" className="inline-block h-4 w-14 rounded-full bg-white/25 motion-safe:animate-pulse" />
+          ) : boops.total === null ? (
             <span className="font-sans font-semibold">{boops.mine.toLocaleString()} {boops.mine === 1 ? "boop" : "boops"}</span>
           ) : (
             <>
