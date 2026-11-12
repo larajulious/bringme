@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Sparkles, Users } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 
+import { Mascot } from "@/components/brand/mascot";
+import { Feature, TAGLINE } from "@/components/marketing/pricing-cards";
 import { StartTrialButton } from "@/components/subscription/start-trial-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { formatMoney, type CheckoutCurrency } from "@/lib/billing/currency";
 import { passAction, type CurrentPass } from "@/lib/game-pass/ui";
@@ -16,12 +17,13 @@ export type PickerPlan = {
   code: string;
   name: string;
   maxPlayers: number;
+  maxRounds: number;
   days: number;
   prices: Partial<Record<CheckoutCurrency, number>>;
   /** Per currency: checkout enabled, product mapped AND Polar charges exactly this price. */
   purchasable: Partial<Record<CheckoutCurrency, boolean>>;
 };
-export type TrialCard = { maxPlayers: number; days: number; state: "available" | "active" | "used" | "unavailable" };
+export type TrialCard = { maxPlayers: number; maxRounds: number; days: number; state: "available" | "active" | "used" | "unavailable" };
 
 /** The required one-line terms (shown verbatim). */
 export const PASS_TERMS_SENTENCE = "One-time payment. Seven days of access. No automatic renewal.";
@@ -87,6 +89,7 @@ export function PlanPicker({
     }
   };
 
+  const popular = plans.find((p) => p.code === "party")?.code ?? plans[Math.floor(plans.length / 2)]?.code;
   const anyBuyable = checkoutEnabled && plans.some((p) => p.purchasable[currency]);
 
   return (
@@ -123,19 +126,19 @@ export function PlanPicker({
         <p role="alert" className="rounded-2xl border border-brand-coral/40 bg-brand-coral/10 px-4 py-3 text-sm font-semibold text-foreground">{error}</p>
       ) : null}
 
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,15rem),1fr))]">
+      <ul className="grid items-stretch gap-5 pt-3 sm:grid-cols-2 lg:grid-cols-4">
         {trial ? (
-          <Card className="flex flex-col border-brand-yellow/60">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Sparkles aria-hidden="true" className="size-5 text-brand-coral" /> Free Trial</CardTitle>
-              <p className="font-display text-3xl font-bold text-primary">Free</p>
-              <p className="text-xs text-muted-foreground">No payment, no card</p>
-            </CardHeader>
-            <CardContent className="flex flex-1 flex-col gap-4">
-              <ul className="grid gap-2 text-sm">
-                <li className="flex items-center gap-2"><Users aria-hidden="true" className="size-4 text-primary" /> Up to {trial.maxPlayers} players per game</li>
-                <li className="flex items-center gap-2"><Check aria-hidden="true" className="size-4 text-primary" /> {trial.days} days of hosting</li>
-                <li className="flex items-center gap-2"><Check aria-hidden="true" className="size-4 text-primary" /> Once per account</li>
+          <li>
+            <article className="flex h-full flex-col rounded-3xl border-2 border-dashed border-brand-yellow bg-card p-6 shadow-card">
+              <h3 className="flex items-center gap-2 font-display text-xl font-bold text-primary"><Sparkles aria-hidden="true" className="size-5 text-brand-coral" /> Free Trial</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Try it with your closest teammates</p>
+              <p className="mt-5 font-display text-5xl font-bold text-primary">Free</p>
+              <p className="text-sm text-muted-foreground">No card needed</p>
+              <ul className="my-6 grid gap-2.5 text-sm">
+                <Feature icon><strong>Up to {trial.maxPlayers} players</strong> per game</Feature>
+                <Feature><strong>Up to {trial.maxRounds} rounds</strong> per game</Feature>
+                <Feature>{trial.days} days of hosting</Feature>
+                <Feature>Once per account</Feature>
               </ul>
               <div className="mt-auto">
                 {trial.state === "available" ? <StartTrialButton /> : (
@@ -144,8 +147,8 @@ export function PlanPicker({
                   </p>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </article>
+          </li>
         ) : null}
 
         {plans.map((p) => {
@@ -154,38 +157,61 @@ export function PlanPicker({
           const canBuy = checkoutEnabled && price != null && p.purchasable[currency] === true;
           const action = passAction(current, p.maxPlayers);
           const otherOk = checkoutEnabled && p.purchasable[other] === true;
+          const hot = p.code === popular;
           return (
-            <Card key={p.code} className={cn("flex flex-col", highlight === p.code && "ring-4 ring-brand-yellow")}>
-              <CardHeader>
-                {highlight === p.code ? <Badge variant="yellow" className="w-fit">Your pick</Badge> : null}
-                <CardTitle>{p.name}</CardTitle>
-                <p className="font-display text-3xl font-bold text-primary">
+            <li key={p.code}>
+              <article
+                className={cn(
+                  "relative flex h-full flex-col rounded-3xl p-6 shadow-card",
+                  hot ? "bg-gradient-to-b from-primary to-brand-night text-white ring-4 ring-brand-yellow lg:-my-3 lg:py-9" : "border bg-card",
+                  highlight === p.code && !hot && "ring-4 ring-brand-yellow",
+                )}
+              >
+                {hot ? (
+                  <>
+                    <Mascot mood="cheer" className="absolute -top-9 right-5 w-16" />
+                    <Badge variant="yellow" className="absolute -top-3 left-6">Most popular</Badge>
+                  </>
+                ) : null}
+                {highlight === p.code ? <Badge variant="coral" className="absolute -top-3 right-6">Your pick</Badge> : null}
+                <h3 className={cn("font-display text-xl font-bold", hot ? "text-brand-yellow" : "text-primary")}>{p.name}</h3>
+                <p className={cn("mt-1 text-sm", hot ? "text-white/80" : "text-muted-foreground")}>{TAGLINE[p.code] ?? `Games of up to ${p.maxPlayers} players`}</p>
+                <p key={currency} className={cn("mt-5 animate-pop-in font-display text-5xl font-bold", hot ? "text-white" : "text-primary")}>
                   {price != null ? formatMoney(price, currency) : "—"}
-                  <span className="ml-1 align-middle text-sm font-semibold text-muted-foreground">{currency}</span>
                 </p>
-                {alt != null ? <p className="text-xs text-muted-foreground">or {formatMoney(alt, other)} {other}</p> : null}
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col gap-4">
-                <ul className="grid gap-2 text-sm">
-                  <li className="flex items-center gap-2"><Users aria-hidden="true" className="size-4 text-primary" /> Up to {p.maxPlayers} players per game</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" className="size-4 text-primary" /> {p.days} days of hosting</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" className="size-4 text-primary" /> One-time payment, no renewal</li>
+                <p className={cn("text-sm", hot ? "text-white/80" : "text-muted-foreground")}>
+                  per {p.days}-day pass{alt != null ? <> · or {formatMoney(alt, other)} {other}</> : null}
+                </p>
+                <ul className="my-6 grid gap-2.5 text-sm">
+                  <Feature icon hot={hot}><strong>Up to {p.maxPlayers} players</strong> per game</Feature>
+                  <Feature hot={hot}><strong>Up to {p.maxRounds} rounds</strong> per game</Feature>
+                  <Feature hot={hot}>One-time payment</Feature>
+                  <Feature hot={hot}>{p.days} days of hosting</Feature>
+                  <Feature hot={hot}>No automatic renewal</Feature>
                 </ul>
                 <div className="mt-auto grid gap-1.5">
-                  <Button ref={highlight === p.code ? picked : undefined} className="w-full" disabled={!canBuy || busy !== null} onClick={() => buy(p)} aria-describedby={`note-${p.code} pass-terms`} aria-busy={busy === p.code}>
+                  <Button
+                    ref={highlight === p.code ? picked : undefined}
+                    variant={hot ? "default" : "outline"}
+                    className="w-full"
+                    disabled={!canBuy || busy !== null}
+                    onClick={() => buy(p)}
+                    aria-describedby={`note-${p.code} pass-terms`}
+                    aria-busy={busy === p.code}
+                  >
                     {canBuy && price != null
                       ? busy === p.code ? "Opening secure checkout…" : `${action.label} · ${formatMoney(price, currency)} ${currency}`
                       : action.label}
                   </Button>
-                  <p id={`note-${p.code}`} className="text-xs text-muted-foreground">
+                  <p id={`note-${p.code}`} className={cn("text-xs", hot ? "text-white/80" : "text-muted-foreground")}>
                     {canBuy ? action.note : checkoutEnabled && otherOk ? `Not available in ${currency} right now. Switch to ${other}.` : "Online checkout for this pass opens soon."}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </article>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       <div id="pass-terms" className="space-y-2 text-sm text-muted-foreground">
         <ul className="flex flex-wrap gap-2" aria-label="Purchase terms">

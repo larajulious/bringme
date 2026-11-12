@@ -12,7 +12,7 @@ import { formatMoney, type CheckoutCurrency } from "@/lib/billing/currency";
 import type { PublicCatalog } from "@/lib/billing/public-plans";
 import { cn } from "@/lib/utils";
 
-const TAGLINE: Record<string, string> = {
+export const TAGLINE: Record<string, string> = {
   starter: "Team huddles and small teams",
   party: "Department parties and team building",
   pro: "Town halls and company-wide events",
@@ -117,7 +117,7 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
   );
 }
 
-function Feature({ children, icon = false, hot = false }: { children: React.ReactNode; icon?: boolean; hot?: boolean }) {
+export function Feature({ children, icon = false, hot = false }: { children: React.ReactNode; icon?: boolean; hot?: boolean }) {
   const Icon = icon ? Users : Check;
   return (
     <li className="flex items-start gap-2">

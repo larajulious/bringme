@@ -28,7 +28,7 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
   const supabase = await createClient();
   const [pass, plans, prices, timeline, history] = await Promise.all([
     getMyGamePass(),
-    supabase.from("subscription_plans").select("id, code, name, max_players_per_game, duration_seconds, is_trial, tier, is_active")
+    supabase.from("subscription_plans").select("id, code, name, max_players_per_game, max_rounds_per_game, duration_seconds, is_trial, tier, is_active")
       .not("tier", "is", null).order("tier"),
     supabase.from("plan_prices").select("plan_id, currency, amount_minor").eq("is_active", true),
     supabase.rpc("my_pass_timeline"),
@@ -49,14 +49,14 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
     const pr = priceMap(p.id);
     const s = sync[p.code as PaidPlanCode] ?? {};
     return {
-      code: p.code, name: p.name, maxPlayers: p.max_players_per_game, days: Math.round(p.duration_seconds / 86_400), prices: pr,
+      code: p.code, name: p.name, maxPlayers: p.max_players_per_game, maxRounds: p.max_rounds_per_game, days: Math.round(p.duration_seconds / 86_400), prices: pr,
       purchasable: { PHP: s.PHP === "ok", USD: s.USD === "ok" },
     };
   });
 
   const trialPlan = (plans.data ?? []).find((p) => p.is_trial);
   const trial: TrialCard | null = trialPlan ? {
-    maxPlayers: trialPlan.max_players_per_game, days: Math.round(trialPlan.duration_seconds / 86_400),
+    maxPlayers: trialPlan.max_players_per_game, maxRounds: trialPlan.max_rounds_per_game, days: Math.round(trialPlan.duration_seconds / 86_400),
     state: !trialPlan.is_active ? "unavailable"
       : pass?.trial.status === "active" ? "active"
       : pass?.trial.used ? "used"
