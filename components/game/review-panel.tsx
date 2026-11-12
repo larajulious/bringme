@@ -87,50 +87,61 @@ export function ReviewPanel({
         <p className="text-sm text-muted-foreground">Fastest first. Times are estimates; results within 150 ms are marked as a close finish. {locked ? "The winner is official: decisions are locked." : "Tap a photo to see it larger."}</p>
       </CardHeader>
       <CardContent>
-        {error ? <p role="alert" className="mb-3 text-destructive">Couldn&apos;t load photos. They will retry on the next update.</p> : null}
-        {rows === null ? <p className="text-muted-foreground">Loading submissions…</p> : null}
-        {rows && rows.length === 0 ? <p className="rounded-2xl border-2 border-dashed border-primary/25 px-4 py-8 text-center text-muted-foreground">No photos yet. They appear here the moment players capture them.</p> : null}
-        <ol className="grid gap-3" aria-label="Submissions, fastest first">
-          {rows?.map((r) => (
-            <li
-              key={r.submissionId}
-              className={cn(
-                "grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-2xl p-3 lg:grid-cols-[6rem_minmax(0,1fr)_auto]",
-                r.isLeader ? "bg-brand-yellow/25 ring-2 ring-brand-yellow" : "bg-secondary",
-                r.status === "rejected" && "opacity-70",
-              )}
-            >
-              <button type="button" onClick={() => onOpen(r)} aria-label={`Open ${r.nickname}'s photo`} className="overflow-hidden rounded-xl">
-                {r.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.photoUrl} alt={`Photo from ${r.nickname}`} loading="lazy" className="size-24 bg-black object-cover" />
-                ) : <span className="grid size-24 place-items-center bg-muted text-xs">no photo</span>}
-              </button>
-              <div className="min-w-0">
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-display text-lg font-semibold text-secondary-foreground">
-                  <span className="truncate">#{r.rank} {r.nickname}</span>
-                  {r.isLeader ? <Badge variant="default"><Crown aria-hidden="true" className="size-3" /> Would win</Badge> : null}
-                </p>
-                <p className="font-mono text-2xl font-bold tabular-nums text-primary" aria-label="Time">{formatElapsed(r.rankMs)}</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  <Badge variant={statusBadge[r.status]}>{statusLabel[r.status]}</Badge>
-                  {r.nearTie ? <Badge variant="outline">close finish</Badge> : null}
-                  {r.timing === "flagged" ? (
-                    <Badge variant="coral" title={r.flags.map((f) => flagText[f] ?? f).join("; ")}>
-                      <TriangleAlert aria-hidden="true" className="size-3" /> server time used
-                    </Badge>
-                  ) : null}
-                </div>
-              </div>
-              {!locked ? (
-                <div className="col-span-2 lg:col-span-1">
-                  <ReviewButtons row={r} disabled={busyId === r.submissionId} onReview={onReview} />
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ol>
+        <SubmissionList rows={rows} locked={locked} busyId={busyId} error={error} onReview={onReview} onOpen={onOpen} />
       </CardContent>
     </Card>
+  );
+}
+
+function SubmissionList({ rows, locked, busyId, error, onReview, onOpen }: {
+  rows: LiveSubmission[] | null; locked: boolean; busyId: string | null; error: boolean;
+  onReview: (submissionId: string, decision: Decision) => void; onOpen: (row: LiveSubmission) => void;
+}) {
+  return (
+    <div>
+      {error ? <p role="alert" className="mb-3 text-destructive">Couldn&apos;t load photos. They will retry on the next update.</p> : null}
+      {rows === null ? <p className="text-muted-foreground">Loading submissions…</p> : null}
+      {rows && rows.length === 0 ? <p className="rounded-2xl border-2 border-dashed border-primary/25 px-4 py-8 text-center text-muted-foreground">No photos yet. They appear here the moment players capture them.</p> : null}
+      <ol className="grid gap-3" aria-label="Submissions, fastest first">
+        {rows?.map((r) => (
+          <li
+            key={r.submissionId}
+            className={cn(
+              "grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-2xl p-3 lg:grid-cols-[6rem_minmax(0,1fr)_auto]",
+              r.isLeader ? "bg-brand-yellow/25 ring-2 ring-brand-yellow" : "bg-secondary",
+              r.status === "rejected" && "opacity-70",
+            )}
+          >
+            <button type="button" onClick={() => onOpen(r)} aria-label={`Open ${r.nickname}'s photo`} className="overflow-hidden rounded-xl">
+              {r.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.photoUrl} alt={`Photo from ${r.nickname}`} loading="lazy" className="size-24 bg-black object-cover" />
+              ) : <span className="grid size-24 place-items-center bg-muted text-xs">no photo</span>}
+            </button>
+            <div className="min-w-0">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-display text-lg font-semibold text-secondary-foreground">
+                <span className="truncate">#{r.rank} {r.nickname}</span>
+                {r.isLeader ? <Badge variant="default"><Crown aria-hidden="true" className="size-3" /> Would win</Badge> : null}
+              </p>
+              <p className="font-mono text-2xl font-bold tabular-nums text-primary" aria-label="Time">{formatElapsed(r.rankMs)}</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                <Badge variant={statusBadge[r.status]}>{statusLabel[r.status]}</Badge>
+                {r.nearTie ? <Badge variant="outline">close finish</Badge> : null}
+                {r.timing === "flagged" ? (
+                  <Badge variant="coral" title={r.flags.map((f) => flagText[f] ?? f).join("; ")}>
+                    <TriangleAlert aria-hidden="true" className="size-3" /> server time used
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+            {!locked ? (
+              <div className="col-span-2 lg:col-span-1">
+                <ReviewButtons row={r} disabled={busyId === r.submissionId} onReview={onReview} size="default" />
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

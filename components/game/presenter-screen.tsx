@@ -1,7 +1,7 @@
 "use client";
 
 import { DoorClosed, Expand, Minimize, Users } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
 import { Logo } from "@/components/brand/logo";
@@ -218,6 +218,7 @@ function FinalScreen({ s, photos }: { s: HostSnapshot; photos: { no: number; pho
   for (const r of results) if (r.winnerName) wins.set(r.winnerName, (wins.get(r.winnerName) ?? 0) + 1);
   const top = Math.max(0, ...wins.values());
   const champions = [...wins.entries()].filter(([, c]) => c === top && top > 0).map(([n]) => n);
+  const fit = finalFit(results.length);
 
   return (
     <div className="relative isolate flex h-full flex-col gap-[2dvh] bg-gradient-to-b from-primary to-brand-night px-[4vw] py-[3dvh]">
@@ -232,25 +233,45 @@ function FinalScreen({ s, photos }: { s: HostSnapshot; photos: { no: number; pho
           ) : `${s.title} · thanks for playing!`}
         </p>
       </div>
-      <ol className="relative z-10 grid min-h-0 flex-1 content-start gap-[1.5dvh] overflow-hidden xl:grid-cols-2" aria-label="Winners by round">
+      {/* Every round always fits the screen (a projector can't scroll): columns grow with the number of rounds,
+          rows share the height equally, and each row's text and photo scale with the row (container units). */}
+      <ol
+        className={cn("relative z-10 grid min-h-0 flex-1 gap-[1.5dvh]", fit.cols,
+          "[grid-template-rows:repeat(var(--rows-p),minmax(0,1fr))] landscape:[grid-template-rows:repeat(var(--rows-l),minmax(0,1fr))]")}
+        style={{ "--rows-p": fit.rowsP, "--rows-l": fit.rowsL } as CSSProperties}
+        aria-label="Winners by round"
+      >
         {results.map((r, i) => {
           const photo = photos.find((p) => p.no === r.no)?.photoUrl ?? null;
           return (
-            <li key={r.no} className="flex animate-rise items-center gap-[2vw] rounded-3xl bg-white/10 p-[1.5dvh] motion-reduce:animate-none" style={{ animationDelay: `${300 + i * 120}ms` }}>
-              <span className="grid size-[min(3.5rem,7dvh)] shrink-0 place-items-center rounded-2xl bg-brand-yellow font-display text-[min(1.75rem,3.5dvh)] font-bold text-brand-night">{r.no}</span>
-              {photo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photo} alt={`Winning photo, round ${r.no}`} className="size-[min(7rem,10dvh)] -rotate-2 rounded-xl border-4 border-white bg-black object-cover shadow-card" />
-              ) : null}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[clamp(1rem,2.8dvh,1.5rem)] text-white/80">{r.prompt}</p>
-                <p className="truncate font-display text-[clamp(1.5rem,4.5dvh,3rem)] font-bold text-brand-yellow">{r.winnerName ?? "No winner"}</p>
+            <li key={r.no} className="min-h-0 min-w-0 animate-rise [container-type:size] motion-reduce:animate-none" style={{ animationDelay: `${300 + i * 120}ms` }}>
+              <div className="flex h-full items-center gap-[min(2vw,4cqh)] rounded-3xl bg-white/10 px-[min(1.5rem,6cqh)] py-[min(1.5dvh,8cqh)]">
+                <span className="grid size-[min(3.5rem,62cqh)] shrink-0 place-items-center rounded-2xl bg-brand-yellow font-display text-[min(1.75rem,32cqh)] font-bold text-brand-night">{r.no}</span>
+                {photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo} alt={`Winning photo, round ${r.no}`} className="size-[min(7rem,80cqh)] shrink-0 -rotate-2 rounded-xl [border-width:min(4px,3cqh)] border-white bg-black object-cover shadow-card" />
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[min(1.5rem,22cqh,6cqw)] leading-tight text-white/80" title={r.prompt}>{r.prompt}</p>
+                  <p className="truncate font-display text-[min(3rem,36cqh,9cqw)] font-bold leading-tight text-brand-yellow" title={r.winnerName ?? "No winner"}>{r.winnerName ?? "No winner"}</p>
+                </div>
+                {r.winnerMs !== null ? <p className="shrink-0 font-mono text-[min(3rem,32cqh,8cqw)] font-bold tabular-nums">{formatElapsed(r.winnerMs)}</p> : null}
               </div>
-              {r.winnerMs !== null ? <p className="font-mono text-[clamp(1.5rem,4.5dvh,3rem)] font-bold tabular-nums">{formatElapsed(r.winnerMs)}</p> : null}
             </li>
           );
         })}
       </ol>
     </div>
   );
+}
+
+/**
+ * Layout that fits n rounds on one screen: columns (portrait / landscape) and the number of equal row tracks.
+ * At least 4-5 tracks, so a short game keeps comfortable rows instead of two giant ones.
+ */
+export function finalFit(n: number) {
+  const colsL = n <= 4 ? 1 : n <= 10 ? 2 : n <= 24 ? 3 : 4;
+  const colsP = n <= 8 ? 1 : 2;
+  const cols = cn(colsP === 2 ? "grid-cols-2" : "grid-cols-1", colsL === 4 ? "landscape:grid-cols-4" : colsL === 3 ? "landscape:grid-cols-3" : colsL === 2 ? "landscape:grid-cols-2" : "landscape:grid-cols-1");
+  return { cols, rowsP: Math.max(5, Math.ceil(n / colsP)), rowsL: Math.max(4, Math.ceil(n / colsL)) };
 }

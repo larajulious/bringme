@@ -20,6 +20,7 @@ let db: PGlite;
 // Exactly what client roles may EXECUTE (non-trigger functions). Anything new must be reviewed here.
 const ANON_EXEC = ["can_listen_game_topic"];
 const AUTH_EXEC = [
+  "add_game_round", // migration 23: owner-checked inside
   "admin_list_subscribers", "admin_overview", "admin_pass_counts", "admin_pass_timeline", "admin_purchase_history", "admin_revenue",
   "admin_subscriber_state",
   // BingoSnap (migrations 18-20): owner-checked inside; guests use the service-role functions only
@@ -27,6 +28,7 @@ const AUTH_EXEC = [
   "can_listen_game_topic", "create_bingosnap_game", "create_game_with_rounds", "default_max_players", "ensure_my_trial", "game_results",
   "game_transition", "generate_join_code", "host_game_state", "is_super_admin", "my_access_status", "my_checkout_status", "my_entitlement",
   "my_game_pass_summary", "my_pass_timeline", "my_purchase_history", "my_trial_eligibility", "owns_game", "owns_game_path",
+  "replay_round", // migration 26: owner-checked inside
   "review_submission", "round_ranking", "start_trial",
 ];
 const execFor = async (role: string) => (await db.query<{ proname: string }>(
@@ -87,7 +89,7 @@ describe("TypeScript types match the migrated schema", () => {
       });
       if (!ok) missing.push(`${name}(${args.join(",")})`);
     }
-    assert.equal(count, 67, `parsed ${count} functions (update when the types gain or lose functions)`);
+    assert.equal(count, 69, `parsed ${count} functions (update when the types gain or lose functions)`);
     assert.deepEqual(missing, []);
   });
 });

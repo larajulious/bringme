@@ -30,7 +30,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
     supabase.from("games").select("id, title, status, join_code, max_players, created_at, game_type").eq("id", id).maybeSingle(),
     supabase.rpc("host_game_state", { p_game: id }),
     supabase.from("players").select("id, nickname").eq("game_id", id).is("kicked_at", null).order("joined_at", { ascending: true }),
-    supabase.from("game_rounds").select("round_no, prompt").eq("game_id", id).order("round_no", { ascending: true }),
+    supabase.from("game_rounds").select("round_no, prompt, status").eq("game_id", id).order("round_no", { ascending: true }),
   ]);
   if (game?.game_type === "bingosnap") redirect(`/dashboard/extra-fun/bingosnap/${game.id}`);
   if (!game || snapshot.error || !snapshot.data) notFound();
@@ -74,8 +74,8 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
     return (
       <>
         {back}
-        <PageHeading title="Game on" description="You control every step. Players follow along on their phones." />
-        <HostConsole gameId={game.id} initial={state} initialPlayers={roster} maxRounds={maxRounds} />
+        <PageHeading className="max-sm:sr-only" title="Game on" description="One button runs each step. Players follow along on their phones." />
+        <HostConsole gameId={game.id} initial={state} initialPlayers={roster} initialRounds={rounds.data ?? []} maxRounds={maxRounds} />
       </>
     );
   }

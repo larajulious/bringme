@@ -49,7 +49,7 @@ export function bringMeOnScreen(s: HostSnapshot): OnScreen {
     return { key: "join", Icon: QrCode, title: "Join screen", detail: `QR code and room ${s.joinCode ?? ""} · ${s.playerCount} joined`.replace("room  ·", "room ·") };
   }
   const roundNo = r?.no ?? s.totalRounds - s.roundsRemaining + 1;
-  if (s.phase === "countdown") return { key: `count:${roundNo}`, Icon: Clock, title: "3-2-1 countdown", detail: `Round ${roundNo} of ${s.totalRounds}` };
+  if (s.phase === "countdown") return { key: `count:${roundNo}`, Icon: Clock, title: "Countdown", detail: `Round ${roundNo} of ${s.totalRounds}` };
   if (s.phase === "active" && r) {
     return r.status === "closed"
       ? { key: `closed:${r.no}`, Icon: Timer, title: "Time's up", detail: `${s.submissionCount} ${s.submissionCount === 1 ? "photo" : "photos"} in` }

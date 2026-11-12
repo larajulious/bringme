@@ -101,7 +101,7 @@ describe("state machine: happy path", () => {
     s = await step("start_countdown", "countdown");
     assert.ok(s.countdownEndsAt, "server-generated countdown end");
     const ahead = Date.parse(s.countdownEndsAt!) - Date.parse(s.serverNow);
-    assert.ok(ahead > 1500 && ahead <= 3100, `countdown ≈3s ahead of the server clock (got ${ahead}ms)`);
+    assert.ok(ahead > 3500 && ahead <= 5100, `countdown ≈5s ahead of the server clock (got ${ahead}ms)`);
     assert.equal(s.round?.status, "pending");
     assert.equal((await playerView(g)).round?.prompt ?? null, null, "item hidden from players during the countdown");
 

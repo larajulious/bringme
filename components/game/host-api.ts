@@ -64,3 +64,42 @@ export async function runAction(
   return { result };
 }
 export { phaseKey };
+
+/** Replay the current round (photos stopped too early). Same stale-state handling as runAction. */
+export async function replayRound(gameId: string, current: HostSnapshot): Promise<{ result: TransitionResult; changedUnderneath?: HostSnapshot }> {
+  const post = async (version: number): Promise<TransitionResult> => {
+    try {
+      const res = await fetch(`/api/host/games/${gameId}/replay`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedVersion: version }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { state?: HostSnapshot; error?: string };
+      return res.ok && body.state ? { ok: true, state: body.state } : { ok: false, error: body.error ?? "request_failed" };
+    } catch {
+      return { ok: false, error: "network" };
+    }
+  };
+  let result = await post(current.version);
+  if (result.ok || result.error !== "stale_state") return { result };
+  const fresh = await fetchHostSnapshot(gameId);
+  if (fresh.status !== "ok") return { result };
+  if (phaseKey(fresh.state) !== phaseKey(current)) return { result, changedUnderneath: fresh.state };
+  result = await post(fresh.state.version);
+  return { result };
+}
+
+/**
+ * Run several Game Master actions as ONE host step (e.g. countdown + reveal), each against the
+ * state the previous one returned. Stops at the first refusal; `reached` is the last state that
+ * did apply, so the screen never shows less progress than the server has.
+ */
+export async function runSteps(
+  gameId: string, actions: HostAction[], start: HostSnapshot, winnerPlayerId?: string | null,
+): Promise<{ result: TransitionResult; changedUnderneath?: HostSnapshot; reached?: HostSnapshot }> {
+  let cur = start;
+  for (const [i, action] of actions.entries()) {
+    const { result, changedUnderneath } = await runAction(gameId, action, cur.version, phaseKey(cur), winnerPlayerId);
+    if (!result.ok) return { result, changedUnderneath, reached: i > 0 ? cur : undefined };
+    cur = result.state;
+  }
+  return { result: { ok: true, state: cur } };
+}

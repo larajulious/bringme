@@ -222,6 +222,8 @@ type RoundRow = {
   winner_rank_ms: number | null;
   /** Write-once: set when the winner (or "no winner") is confirmed. */
   winner_confirmed_at: string | null;
+  /** Set when the host replayed this round (it ended with no winner; a copy followed). */
+  replayed_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -454,6 +456,11 @@ export type Database = {
       /** Host adds one round to a lobby/live game (plan round limit enforced by trigger). */
       add_game_round: {
         Args: { p_game: string; p_prompt: string };
+        Returns: Json;
+      };
+      /** Host replays a round stopped too early (before its winner): closes it as "no winner", starts a copy. */
+      replay_round: {
+        Args: { p_game: string; p_expected_version: number };
         Returns: Json;
       };
       admin_overview: {

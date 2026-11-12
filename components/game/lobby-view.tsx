@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { fetchHostSnapshot, fetchRoster, phaseKey, runAction } from "@/components/game/host-api";
+import { fetchHostSnapshot, fetchRoster, runSteps } from "@/components/game/host-api";
+import { ItemPrivacyToggle, ItemText, useItemPrivacy } from "@/components/game/item-privacy";
 import { OnScreenNow, bringMeOnScreen } from "@/components/game/on-screen-now";
 import { useGameSync } from "@/components/game/use-game-sync";
-import type { HostSnapshot } from "@/lib/game/types";
+import type { HostAction, HostSnapshot } from "@/lib/game/types";
 import { CopyField } from "@/components/game/copy-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ export function LobbyView({
     gameId, role: "host", initial: initialState, fetchSnapshot: () => fetchHostSnapshot(gameId),
   });
   const [players, setPlayers] = useState(initialPlayers);
+  const [itemsHidden, toggleItems] = useItemPrivacy();
   useEffect(() => {
     let live = true;
     void fetchRoster(gameId).then((r) => { if (live && r) setPlayers(r); });
@@ -68,10 +70,13 @@ export function LobbyView({
       resync();
       return;
     }
-    const { result, changedUnderneath } = await runAction(gameId, action, state.version, phaseKey(state));
+    // Start game also runs round 1's 3-2-1 and reveal, so the host doesn't need two more presses.
+    const steps: HostAction[] = action === "start_game" ? ["start_game", "start_countdown", "start_round"] : [action];
+    const { result, changedUnderneath, reached } = await runSteps(gameId, steps, state);
     setBusy(null);
     setConfirm(null);
     if (!result.ok) {
+      if (reached) { toast(ok, "success"); return router.refresh(); } // the game did start; the console offers the next step
       if (changedUnderneath) applyState(changedUnderneath); else resync();
       return toast(apiErrors[result.error] ?? "Something went wrong. Please try again.", "error");
     }
@@ -122,6 +127,13 @@ export function LobbyView({
                 ))}
               </ul>
             )}
+            {items[0] ? (
+              <div className="relative rounded-2xl bg-brand-yellow/25 px-12 py-2 text-center">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Round 1 item · only you can see it</p>
+                <p className="break-words font-display text-xl font-bold text-primary"><ItemText text={items[0]} hidden={itemsHidden} /></p>
+                <ItemPrivacyToggle hidden={itemsHidden} onToggle={toggleItems} className="absolute right-1 top-1/2 -translate-y-1/2" />
+              </div>
+            ) : null}
             <Button
               size="lg"
               className={cn("h-20 w-full text-2xl", count > 0 && busy === null && "animate-pulse-soft motion-reduce:animate-none")}
@@ -130,7 +142,9 @@ export function LobbyView({
             >
               <Play aria-hidden="true" className="!size-7" /> {busy === "start" ? "Starting…" : "Start game"}
             </Button>
-            {count === 0 ? <p className="-mt-2 text-center text-sm text-muted-foreground">You can start once someone has joined.</p> : null}
+            <p className="-mt-2 text-center text-sm text-muted-foreground">
+              {count === 0 ? "You can start once someone has joined." : "Round 1 begins right away with a 5-second countdown."}
+            </p>
             <Button variant="ghost" className="text-destructive hover:bg-destructive/10" disabled={busy !== null} onClick={() => setConfirm({ kind: "cancel" })}>
               Cancel game
             </Button>
@@ -141,7 +155,10 @@ export function LobbyView({
           <CardHeader>
             <CardTitle className="flex items-center justify-between gap-3">
               <span>What players will bring</span>
-              <Badge variant="secondary">{roundCount} {roundCount === 1 ? "round" : "rounds"}</Badge>
+              <span className="flex items-center gap-1">
+                <Badge variant="secondary">{roundCount} {roundCount === 1 ? "round" : "rounds"}</Badge>
+                {items.length ? <ItemPrivacyToggle hidden={itemsHidden} onToggle={toggleItems} label="items" /> : null}
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -149,7 +166,7 @@ export function LobbyView({
               {items.map((it, i) => (
                 <li key={i} className="flex items-center gap-3 rounded-2xl bg-secondary px-3 py-2">
                   <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-yellow font-display font-bold text-brand-night">{i + 1}</span>
-                  <span className="min-w-0 break-words font-semibold text-secondary-foreground">{it}</span>
+                  <ItemText text={it} hidden={itemsHidden} className="min-w-0 break-words font-semibold text-secondary-foreground" />
                 </li>
               ))}
               {items.length === 0 ? <li className="text-muted-foreground">{roundCount} {roundCount === 1 ? "round" : "rounds"} ready.</li> : null}

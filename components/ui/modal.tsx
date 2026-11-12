@@ -56,8 +56,8 @@ export function Modal({
     >
       <div className="flex flex-col gap-4 p-6">
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <h2 id={titleId} className="text-2xl font-bold">
+          <div className="min-w-0 space-y-1">
+            <h2 id={titleId} className="break-words text-xl font-bold sm:text-2xl">
               {title}
             </h2>
             {description ? (
@@ -70,14 +70,15 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid size-10 shrink-0 place-items-center rounded-full text-primary transition-colors hover:bg-accent"
+            className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center rounded-full text-primary transition-colors hover:bg-accent"
           >
             <X className="size-5" aria-hidden="true" />
           </button>
         </div>
         {children}
         {footer ? (
-          <div className="flex flex-wrap justify-end gap-3">{footer}</div>
+          // Stays in reach while long content scrolls; on phones the buttons stack full width, main action on top.
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col-reverse gap-3 rounded-b-3xl bg-card px-6 pb-6 pt-3 sm:flex-row sm:flex-wrap sm:justify-end">{footer}</div>
         ) : null}
       </div>
     </dialog>

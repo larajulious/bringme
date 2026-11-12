@@ -70,6 +70,9 @@ export function ProjectorStage({
     if (s.phase === "countdown") {
       const left = secondsUntil(s.countdownEndsAt, now, offsetMs);
       main = <Countdown left={left} large={big} flash="absolute" holdAtZero />;
+    } else if (s.phase === "active" && r && !started && r.openedAt) {
+      // The host started the round during the 3-2-1: it opens when the countdown ends.
+      main = <Countdown left={secondsUntil(r.openedAt, now, offsetMs)} large={big} flash="absolute" />;
     } else if (s.phase === "active" && r) {
       main = (
         <div className="grid justify-items-center gap-4">

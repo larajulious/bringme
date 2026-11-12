@@ -1,29 +1,39 @@
 "use client";
 
-import { Flag, Hourglass, Play, Plus, RotateCcw, Trophy, Users } from "lucide-react";
+import { Camera, ChevronDown, Flag, Hourglass, MonitorPlay, Play, Plus, RotateCcw, Square, Trophy, Undo2, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
-import { fetchHostSnapshot, fetchRoster, fetchRounds, phaseKey, runAction } from "@/components/game/host-api";
+import { fetchHostSnapshot, fetchRoster, fetchRounds, replayRound, runSteps } from "@/components/game/host-api";
+import { ItemPrivacyToggle, ItemText, useItemPrivacy } from "@/components/game/item-privacy";
+import { PhotoReviewGrid } from "@/components/game/photo-review-grid";
 import { PhotoViewer } from "@/components/game/photo-viewer";
-import { OnScreenNow, bringMeOnScreen } from "@/components/game/on-screen-now";
-import { ReviewPanel, type Decision, type LiveSubmission } from "@/components/game/review-panel";
-import { useGameSync, type Conn } from "@/components/game/use-game-sync";
+import { bringMeOnScreen } from "@/components/game/on-screen-now";
+import { type Decision, type LiveSubmission } from "@/components/game/review-panel";
+import { useGameSync, useNow, type Conn } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { describeConfirmation, statusLabel } from "@/lib/game/review";
 import { formatElapsed } from "@/lib/game/timing";
-import type { GamePhase, HostAction, HostSnapshot } from "@/lib/game/types";
+import type { HostAction, HostSnapshot } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
 
-const phaseLabel: Record<GamePhase, string> = {
-  lobby: "Waiting", countdown: "Countdown", active: "Round live", reviewing: "Reviewing", winner_announced: "Winner announced", finished: "Finished",
-};
+/** Buttons whose label may be long (names, counts): wrap instead of running off a phone screen. */
+const WRAP = "h-auto min-h-11 whitespace-normal py-2 text-center leading-tight";
+/** Modal footer buttons: full width and stacked on phones. */
+const FOOT = cn(WRAP, "w-full sm:w-auto");
+/** Late uploads the server still accepts after the time limit (see the submissions guard). */
+const UPLOAD_GRACE_MS = 5000;
+const START_ROUND: HostAction[] = ["start_countdown", "start_round"];
+const STOP_AND_REVIEW: HostAction[] = ["close_submissions", "move_to_review"];
+/** A manual early stop waits this long (nothing is sent yet), so a mis-tap can be undone. */
+const STOP_UNDO_MS = 5000;
+
 const errorCopy: Record<string, string> = {
   stale_state: "The game just changed. Check the screen and try again.",
   invalid_transition: "That step isn't available right now.",
@@ -44,20 +54,28 @@ const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Liv
 
 type Row = LiveSubmission;
 
-export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: { gameId: string; initial: HostSnapshot; initialPlayers: { id: string; nickname: string }[]; maxRounds?: number }) {
+type RoundRow = { round_no: number; prompt: string; status: string };
+
+export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [], maxRounds = 0 }: { gameId: string; initial: HostSnapshot; initialPlayers: { id: string; nickname: string }[]; initialRounds?: RoundRow[]; maxRounds?: number }) {
   const { toast } = useToast();
   const { state: s, conn, offsetMs, applyState, resync } = useGameSync<HostSnapshot>({
     gameId, role: "host", initial, fetchSnapshot: () => fetchHostSnapshot(gameId),
   });
   const [busy, setBusy] = useState<HostAction | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [confirmReplay, setConfirmReplay] = useState(false);
+  const [itemHidden, toggleItem] = useItemPrivacy();
+  /** The Submissions list, as a modal. Opens by itself when photos stop. */
+  const [showPhotos, setShowPhotos] = useState(false);
   const [confirmWinner, setConfirmWinner] = useState(false);
+  /** Early stop requested: the round id and when it will actually be sent (client clock). */
+  const [stopping, setStopping] = useState<{ roundId: string; at: number } | null>(null);
   const [players, setPlayers] = useState(initialPlayers);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [rowsError, setRowsError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
-  const [roundList, setRoundList] = useState<{ round_no: number; prompt: string; status: string }[]>([]);
+  const [roundList, setRoundList] = useState<RoundRow[]>(initialRounds);
   const [newItem, setNewItem] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -92,15 +110,27 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
     if (wantRows) void loadRows(); else { setRows(null); }
   }, [wantRows, s.version, s.round?.id, loadRows]);
 
-  const send = async (action: HostAction, winner?: string | null) => {
-    setBusy(action);
-    const { result, changedUnderneath } = await runAction(gameId, action, s.version, phaseKey(s), winner);
+  /** One host step = one or more server actions in a row. `quiet`: automatic steps don't toast (another tab may have done it). */
+  const send = async (step: HostAction | HostAction[], winner?: string | null, quiet = false) => {
+    const actions = Array.isArray(step) ? step : [step];
+    setBusy(actions[0]);
+    const { result, changedUnderneath, reached } = await runSteps(gameId, actions, s, winner);
     setBusy(null);
     if (result.ok) { applyState(result.state); return true; }
-    if (changedUnderneath) applyState(changedUnderneath); else resync();
+    if (changedUnderneath) applyState(changedUnderneath); else if (reached) applyState(reached); else resync();
     if (result.error === "winner_mismatch") void loadRows();
-    toast(errorCopy[result.error] ?? "Something went wrong. Please try again.", "error");
+    if (!quiet) toast(errorCopy[result.error] ?? "Something went wrong. Please try again.", "error");
     return false;
+  };
+
+  const replay = async () => {
+    setBusy("start_round");
+    const { result, changedUnderneath } = await replayRound(gameId, s);
+    setBusy(null);
+    setConfirmReplay(false);
+    if (result.ok) { setViewing(null); applyState(result.state); toast("Round restarted with a new countdown.", "success"); return; }
+    if (changedUnderneath) applyState(changedUnderneath); else resync();
+    toast(errorCopy[result.error] ?? "Couldn't replay the round. Please try again.", "error");
   };
 
   const addRound = async (e: React.FormEvent) => {
@@ -131,6 +161,7 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
     setBusyId(null);
     if (res?.ok) {
       const { state } = (await res.json()) as { state: HostSnapshot };
+      if (decision !== "reset") advanceFrom.current = submissionId; // move the viewer on once the list shows it
       applyState(state);
       void loadRows();
       return;
@@ -143,71 +174,121 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
   const r = s.round;
   const confirmation = describeConfirmation(rows ?? []);
   const locked = Boolean(r?.decided);
-  const nextNo = s.totalRounds - s.roundsRemaining + (s.phase === "lobby" ? 1 : 0);
-  const started = r?.openedAt ? Date.now() + offsetMs >= Date.parse(r.openedAt) : false;
   const viewingRow = rows?.find((x) => x.submissionId === viewing) ?? null;
+
+  // Round clock (server time): before openedAt the 3-2-1 is still running on everyone's screen.
+  const now = useNow(s.phase === "active" || s.phase === "countdown", 250) + offsetMs;
+  const openedAt = r?.openedAt ? Date.parse(r.openedAt) : null;
+  const started = openedAt !== null && now >= openedAt;
+  const secsToStart = openedAt !== null ? Math.max(0, Math.ceil((openedAt - now) / 1000)) : 0;
+  const timeLeft = openedAt !== null && r ? Math.max(0, Math.ceil((openedAt + r.timeLimitSeconds * 1000 - now) / 1000)) : 0;
+
+  // Photos stop by themselves once the time limit (+ upload grace) has passed, and the review opens.
+  // Once per round; a failure (another tab got there first) just re-syncs, and the manual button stays.
+  const autoStopped = useRef<string | null>(null);
+  const roundOpen = s.phase === "active" && r?.status === "open";
+  useEffect(() => {
+    if (!roundOpen || !r || openedAt === null || busy !== null || autoStopped.current === r.id) return;
+    const wait = openedAt + r.timeLimitSeconds * 1000 + UPLOAD_GRACE_MS - (Date.now() + offsetMs);
+    const t = setTimeout(() => { autoStopped.current = r.id; void send(STOP_AND_REVIEW, undefined, true); }, Math.max(0, wait));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `send` reads the latest state; re-arm on each state change
+  }, [roundOpen, r?.id, openedAt, r?.timeLimitSeconds, offsetMs, busy, s.version]);
+
+  // Early stop with an undo window: send only when the window ends; drop it if the round moved on meanwhile.
+  useEffect(() => {
+    if (!stopping) return;
+    if (!roundOpen || r?.id !== stopping.roundId) { setStopping(null); return; }
+    const t = setTimeout(() => { setStopping(null); void send(STOP_AND_REVIEW); }, Math.max(0, stopping.at - Date.now()));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `send` reads the latest state
+  }, [stopping, roundOpen, r?.id]);
+
+  // Review flow: when photos stop, the Submissions modal opens (once per round).
+  const reviewOpened = useRef<string | null>(null);
+  const advanceFrom = useRef<string | null>(null);
+  const reviewing = s.phase === "reviewing" && !r?.decided;
+  useEffect(() => {
+    if (!reviewing || !r || rows === null || reviewOpened.current === r.id) return;
+    reviewOpened.current = r.id;
+    if (rows.length > 0) setShowPhotos(true);
+  }, [reviewing, r, rows]);
+  // After Approve / Disqualify in the large viewer: go to the next waiting photo; after the last one, back to the list.
+  useEffect(() => {
+    const from = advanceFrom.current;
+    if (!from || rows === null) return;
+    const decided = rows.find((x) => x.submissionId === from);
+    if (decided?.status === "pending") return; // the list hasn't caught up yet
+    advanceFrom.current = null;
+    if (viewing !== from) return; // decided from the list, not the viewer: leave the screen alone
+    const next = rows.find((x) => x.status === "pending");
+    if (next) { setViewing(next.submissionId); return; }
+    setViewing(null);
+  }, [rows, viewing]);
 
   if (s.status === "finished" || s.status === "canceled") return <FinishedResults gameId={gameId} initial={s} />;
 
-  const primary = (label: string, action: HostAction, opts: { disabled?: boolean; icon?: React.ReactNode; onClick?: () => void } = {}) => (
-    <Button size="lg" className="h-16 w-full text-xl sm:w-auto sm:px-8" disabled={busy !== null || opts.disabled} onClick={opts.onClick ?? (() => void send(action))}>
-      {opts.icon}{busy === action ? "Working…" : label}
-    </Button>
-  );
-  const finishBtn = primary("Finish game", "end_game", { icon: <Flag aria-hidden="true" className="!size-6" /> });
+  const nextItem = roundList.find((x) => x.status === "pending")?.prompt ?? null;
+  const roundNo = r?.no ?? Math.min(s.totalRounds - s.roundsRemaining + 1, s.totalRounds);
+  const lastRound = s.roundsRemaining === 0;
+  const pending = s.reviewCounts?.pending ?? 0;
 
-  let actions: React.ReactNode = null;
-  if (s.phase === "lobby") actions = s.roundsRemaining > 0 ? primary("Start countdown", "start_countdown", { icon: <Play aria-hidden="true" className="!size-6" /> }) : finishBtn;
-  else if (s.phase === "countdown") {
-    actions = (
-      <>
-        {primary("Reveal item & start round", "start_round", { icon: <Play aria-hidden="true" className="!size-6" /> })}
-        <Button size="lg" variant="outline" className="h-16 w-full text-xl sm:w-auto sm:px-6" disabled={busy !== null} onClick={() => void send("restart_countdown")}>
-          <RotateCcw aria-hidden="true" className="!size-6" />{busy === "restart_countdown" ? "Working…" : "Replay 3-2-1"}
-        </Button>
-      </>
-    );
+  // ONE step at a time: what is happening, what to do, and the single button that does it.
+  type Step = { title: string; hint: string; button?: { label: string; run: () => void; icon: React.ReactNode; disabled?: boolean; pulse?: boolean; variant?: "default" | "camera" } };
+  const startNext = (label: string, actions: HostAction[]): Step["button"] => ({ label, run: () => void send(actions), icon: <Play aria-hidden="true" className="!size-6" />, pulse: true });
+  const finish: Step["button"] = { label: "Finish game & show results", run: () => void send("end_game"), icon: <Flag aria-hidden="true" className="!size-6" /> };
+  let step: Step;
+  if (s.phase === "lobby") {
+    step = lastRound
+      ? { title: "All rounds played", hint: "Finish the game to show the champion.", button: finish }
+      : { title: `Ready for round ${roundNo}`, hint: "Press start: everyone sees a 5-second countdown, then the item.", button: startNext(`Start round ${roundNo}`, START_ROUND) };
+  } else if (s.phase === "countdown") {
+    // Only reached from an older screen or another tab: the 3-2-1 ran, the item isn't revealed yet.
+    step = { title: "Countdown finished", hint: "Reveal the item to start the timer.", button: startNext("Reveal item & start", ["start_round"]) };
+  } else if (s.phase === "active" && r && r.status === "open") {
+    const undoLeft = stopping ? Math.max(1, Math.ceil((stopping.at + offsetMs - now) / 1000)) : 0;
+    step = !started
+      ? { title: "Get ready…", hint: "The countdown is on everyone's screen. The item appears at GO!" }
+      : stopping
+      ? { title: `Ending the hunt in ${undoLeft}…`, hint: "Pressed by mistake? Undo and players keep hunting. Nothing has changed for them yet.",
+          button: { label: "Undo, keep hunting", run: () => setStopping(null), icon: <Undo2 aria-hidden="true" className="!size-6" /> } }
+      : { title: "Players are hunting!", hint: "The hunt ends by itself when time runs out, or stop it now. Either way, you review the photos next.",
+          button: { label: "Stop the hunt now", run: () => setStopping({ roundId: r.id, at: Date.now() + STOP_UNDO_MS }), icon: <Square aria-hidden="true" className="!size-5" />, variant: "camera" } };
+  } else if (s.phase === "active" && r) {
+    step = { title: "Time's up", hint: "Check the photos to pick a winner.", button: { label: "Review photos", run: () => void send("move_to_review"), icon: <Hourglass aria-hidden="true" className="!size-6" /> } };
+  } else if (s.phase === "reviewing") {
+    const hint = s.submissionCount === 0 ? "No photos came in this round."
+      : pending > 0 ? `Approve or disqualify each photo. The fastest approved photo wins.`
+      : confirmation.kind === "winner" ? `All photos checked. ${confirmation.leader.nickname} is the fastest approved photo.`
+      : "All photos checked, none approved.";
+    step = {
+      title: "Pick the winner", hint,
+      // One button: check the photos while any are waiting, then announce.
+      button: pending > 0
+        ? { label: `Check photos (${pending} left)`, run: () => setShowPhotos(true), icon: <Camera aria-hidden="true" className="!size-6" /> }
+        : { label: confirmation.kind === "winner" ? "Announce winner…" : "Announce no winner…", run: () => { setShowPhotos(false); setConfirmWinner(true); }, icon: <Trophy aria-hidden="true" className="!size-6" />, disabled: rows === null },
+    };
+  } else if (s.phase === "winner_announced" && r) {
+    step = lastRound
+      ? { title: r.winnerName ? `${r.winnerName} wins the last round!` : "No winner in the last round", hint: "That was the final round. Show everyone the results.", button: finish }
+      : { title: r.winnerName ? `${r.winnerName} wins round ${r.no}!` : `No winner in round ${r.no}`, hint: "When everyone's ready, start the next round.", button: startNext(`Start round ${r.no + 1}`, ["next_round", ...START_ROUND]) };
+  } else {
+    step = { title: "Working…", hint: "Hang on a second." };
   }
-  else if (s.phase === "active" && r) actions = r.status === "open" ? primary("Stop photos", "close_submissions", { disabled: !started }) : primary("Start reviewing photos", "move_to_review");
-  else if (s.phase === "reviewing") {
-    actions = primary(confirmation.kind === "winner" ? "Declare winner…" : "Declare no winner…", "announce_winner", {
-      icon: <Trophy aria-hidden="true" className="!size-6" />, onClick: () => setConfirmWinner(true), disabled: rows === null,
-    });
-  } else if (s.phase === "winner_announced") actions = s.roundsRemaining > 0 ? primary("Next round", "next_round", { icon: <Play aria-hidden="true" className="!size-6" /> }) : finishBtn;
 
-  const nextOnScreen: Record<string, string> = {
-    start_countdown: "Shows the 3-2-1 countdown.",
-    restart_countdown: "Replays the 3-2-1 countdown.",
-    start_round: "Reveals the item and starts the timer. Players see “Get set…” until you press it.",
-    close_submissions: "Shows “Time's up” and stops new photos. You are not reviewing yet.",
-    move_to_review: "Shows “Judging time!”.",
-    announce_winner: "Reveals the winner (or no winner) to everyone.",
-    next_round: "Shows “Get ready!” for the next round.",
-    end_game: "Shows the final results.",
-  };
-  const stepAction: HostAction | null =
-    s.phase === "lobby" ? (s.roundsRemaining > 0 ? "start_countdown" : "end_game")
-    : s.phase === "countdown" ? "start_round"
-    : s.phase === "active" && r ? (r.status === "open" ? "close_submissions" : "move_to_review")
-    : s.phase === "reviewing" ? "announce_winner"
-    : s.phase === "winner_announced" ? (s.roundsRemaining > 0 ? "next_round" : "end_game")
-    : null;
+  // Progress inside a round: Hunt → Review → Winner.
+  const stages = ["Hunt", "Review", "Winner"];
+  const stageNow = s.phase === "countdown" || (s.phase === "active" && r?.status === "open") ? 0
+    : s.phase === "active" || s.phase === "reviewing" ? 1
+    : s.phase === "winner_announced" ? 2 : -1;
+  // Before a round starts (also on the winner screen), the host sees the item that round will reveal.
+  const upNext = s.phase === "lobby" || (s.phase === "winner_announced" && !lastRound);
+  const item = upNext ? nextItem : r?.prompt ?? nextItem;
+  const showClock = s.phase === "active" && r?.status === "open";
+  const onScreen = bringMeOnScreen(s);
+  // Photos stopped but the result isn't official yet: the round can still be replayed (replay_round).
+  const canReplay = Boolean(r && r.status === "closed" && !r.decided && (s.phase === "active" || s.phase === "reviewing"));
 
-  // Where we are in a round, so the host always knows what comes next (a round = these 4 steps).
-  const steps = ["Get ready", "Photos open", "Review photos", "Winner"];
-  const stepNow = s.phase === "lobby" || s.phase === "countdown" ? 0
-    : s.phase === "active" && r?.status === "open" ? 1
-    : s.phase === "active" || s.phase === "reviewing" ? 2
-    : 3;
-  const whatNow: Record<string, string> = {
-    start_countdown: "Press the button to show the 3-2-1 to everyone.",
-    start_round: "Press the button to show the item and start the timer.",
-    close_submissions: "Players are taking photos. When time is up, press “Stop photos”. Nothing is judged yet.",
-    move_to_review: "Photos are stopped. Next, press “Start reviewing photos” so you can approve or reject them.",
-    announce_winner: "Approve or reject the photos below, then declare the winner.",
-    next_round: "Round done. Press the button to get ready for the next one.",
-    end_game: "All rounds are done. Finish the game to show the final results.",
-  };
   const declare = async () => {
     const winnerId = confirmation.kind === "winner" ? confirmation.leader.playerId : null;
     const ok = await send("announce_winner", winnerId);
@@ -218,89 +299,126 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
   return (
     <div className="grid gap-6">
       <Card>
-        <CardContent className="grid gap-4 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3" role="status">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{r ? `Round ${r.no} of ${s.totalRounds}` : `Round ${Math.min(nextNo, s.totalRounds)} of ${s.totalRounds}`}</Badge>
-              <Badge variant="yellow">{phaseLabel[s.phase]}</Badge>
-            </div>
+        <CardContent className="grid gap-4 p-4 sm:gap-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Badge variant="outline">Round {roundNo} of {s.totalRounds}</Badge>
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
               <span aria-hidden="true" className={cn("size-2.5 rounded-full", conn === "live" ? "bg-emerald-500" : conn === "offline" ? "bg-brand-coral" : "bg-brand-yellow")} />
               {connText[conn]}
             </span>
           </div>
 
-          <ol aria-label="Round progress" className="flex items-center gap-1.5 sm:gap-2">
-            {steps.map((label, i) => (
-              <li key={label} aria-current={i === stepNow ? "step" : undefined} className="flex min-w-0 flex-1 items-center gap-1.5">
-                <span className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold",
-                  i < stepNow ? "bg-primary text-primary-foreground" : i === stepNow ? "bg-brand-yellow text-brand-night ring-2 ring-primary" : "bg-secondary text-muted-foreground")}>{i < stepNow ? "✓" : i + 1}</span>
-                <span className={cn("truncate text-xs font-semibold sm:text-sm", i === stepNow ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+          <ol aria-label="Round progress" className="grid grid-cols-3 gap-2">
+            {stages.map((label, i) => (
+              <li key={label} aria-current={i === stageNow ? "step" : undefined}
+                className={cn("flex items-center justify-center gap-1.5 rounded-full px-2 py-1.5 text-sm font-semibold",
+                  i < stageNow ? "bg-primary/10 text-primary" : i === stageNow ? "bg-brand-yellow text-brand-night" : "bg-secondary text-muted-foreground")}>
+                <span aria-hidden="true">{i < stageNow ? "✓" : i + 1}</span> {label}
               </li>
             ))}
           </ol>
-          {stepAction ? <p className="rounded-xl bg-brand-yellow/20 px-3 py-2 text-sm font-semibold">Now: {whatNow[stepAction]}</p> : null}
 
-          <OnScreenNow screen={bringMeOnScreen(s)} className="border-0 bg-secondary/60 shadow-none" />
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-3xl bg-secondary/60 p-4 sm:gap-4 sm:p-5">
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{upNext ? `Round ${s.phase === "lobby" ? roundNo : roundNo + 1} item · only you can see it` : "Bring me…"}</p>
+                {item ? <ItemPrivacyToggle hidden={itemHidden} onToggle={toggleItem} className="-my-2" /> : null}
+              </div>
+              <p className="break-words font-display text-2xl font-bold leading-tight text-primary min-[400px]:text-3xl sm:text-4xl">{item ? <ItemText text={item} hidden={itemHidden} /> : "—"}</p>
+              <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                {s.playerCount} {s.playerCount === 1 ? "player" : "players"}
+                {r ? <> · {s.submissionCount} {s.submissionCount === 1 ? "photo" : "photos"} in</> : null}
+              </p>
+            </div>
+            {showClock ? (
+              <p className={cn("text-right font-mono text-4xl font-bold tabular-nums sm:text-5xl", started && timeLeft <= 10 ? "text-brand-coral-deep" : "text-foreground")}
+                aria-label={started ? `${timeLeft} seconds left` : `Starts in ${secsToStart}`}>
+                {started ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}` : secsToStart}
+              </p>
+            ) : null}
+          </div>
 
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Stat wide label={r ? "Item to bring" : "Next item"} value={r?.prompt ?? roundList.find((x) => x.status === "pending")?.prompt ?? "—"} />
-              <Stat label="Players" value={String(s.playerCount)} />
-              <Stat label="Photos in" value={String(s.submissionCount)} />
-            </div>
-            <div className="grid justify-items-stretch gap-1.5 sm:justify-items-end">
-              <div className="flex flex-wrap gap-3">{actions}</div>
-              {stepAction ? <p className="text-sm text-muted-foreground sm:text-right">Next on screen: {nextOnScreen[stepAction]}</p> : null}
-            </div>
+          <div role="status" className="grid gap-1 text-center">
+            <h2 className="break-words font-display text-xl font-bold sm:text-2xl">{step.title}</h2>
+            <p className="text-sm text-muted-foreground sm:text-base">{step.hint}</p>
+          </div>
+
+          {wantRows && !(s.phase === "reviewing" && pending > 0) ? (
+            <Button variant="secondary" className={cn(WRAP, "mx-auto w-full sm:w-auto")} onClick={() => setShowPhotos(true)}>
+              <Camera aria-hidden="true" /> See photos ({rows?.length ?? s.submissionCount})
+            </Button>
+          ) : null}
+
+          <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-sm text-muted-foreground">
+            <MonitorPlay aria-hidden="true" className="size-4" /> Presenter screen: <span className="font-semibold text-foreground">{onScreen.title}</span>
+          </p>
+
+          {/* Pinned to the bottom of the scroll area, so the one button is always in reach (phones especially). */}
+          <div className="sticky bottom-0 z-10 -mx-4 -mb-4 rounded-b-3xl bg-card px-4 pb-4 pt-3 shadow-[0_-8px_16px_-12px_rgb(0_0_0/0.25)] sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6">
+            <Button size="lg"
+              className={cn(WRAP, "min-h-16 w-full text-lg sm:text-xl", step.button?.pulse && busy === null && "animate-pulse-soft motion-reduce:animate-none")}
+              variant={step.button?.variant ?? "default"}
+              disabled={!step.button || busy !== null || step.button.disabled} onClick={step.button?.run}>
+              {step.button?.icon}{busy !== null ? "Working…" : step.button?.label ?? "Starting…"}
+            </Button>
+            {canReplay ? (
+              <Button variant="ghost" className={cn(WRAP, "mt-2 w-full text-sm sm:text-base")} disabled={busy !== null} onClick={() => setConfirmReplay(true)}>
+                <RotateCcw aria-hidden="true" /> Hunt ended too early? Replay this round
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>
 
-      {s.totalRounds < maxRounds ? (
-        <Card>
-          <CardContent className="grid gap-2 p-4 sm:p-5">
+      <Modal
+        open={showPhotos && wantRows} onClose={() => setShowPhotos(false)} className="max-w-5xl"
+        title={r?.prompt && !itemHidden ? `Does it show: ${r.prompt}?` : `Photos · round ${roundNo}`}
+        description="Fastest first. Approve or reject each photo, or tap it to see it larger."
+        footer={
+          s.phase === "reviewing" && !locked ? (
+            <>
+              <Button variant="outline" className={FOOT} onClick={() => setShowPhotos(false)}>Close</Button>
+              <Button className={FOOT} disabled={busy !== null || rows === null} onClick={() => { setShowPhotos(false); setConfirmWinner(true); }}>
+                <Trophy aria-hidden="true" /> {confirmation.kind === "winner" ? "Announce winner…" : "Announce no winner…"}
+              </Button>
+            </>
+          ) : <Button variant="outline" className={FOOT} onClick={() => setShowPhotos(false)}>Close</Button>
+        }
+      >
+        <PhotoReviewGrid rows={rows} locked={locked} busyId={busyId} error={rowsError} onReview={review} onOpen={(x) => setViewing(x.submissionId)} />
+      </Modal>
+
+      <div className="grid gap-3">
+        <Fold icon={<Users aria-hidden="true" className="size-5 text-primary" />} title="Players" meta={String(s.playerCount)}>
+          {players.length === 0 ? (
+            <p className="flex items-center gap-2 text-muted-foreground"><Hourglass aria-hidden="true" className="size-4" /> No players.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-2" aria-label="Players">
+              {players.map((p) => <li key={p.id} className="rounded-full bg-secondary px-4 py-1.5 font-display font-semibold text-secondary-foreground">{p.nickname}</li>)}
+            </ul>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">New players can&apos;t join once the game has started.</p>
+        </Fold>
+
+        {s.totalRounds < maxRounds ? (
+          <Fold icon={<Plus aria-hidden="true" className="size-5 text-primary" />} title="Add another round" meta={`${s.totalRounds} of ${maxRounds}`}>
             <form onSubmit={(e) => void addRound(e)} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <div className="grid gap-1.5">
-                <label htmlFor="add-round" className="font-display font-semibold">Add another round</label>
+                <label htmlFor="add-round" className="text-sm font-semibold">What should players bring?</label>
                 <Input id="add-round" value={newItem} maxLength={200} onChange={(e) => setNewItem(e.target.value)} placeholder="Something blue" />
               </div>
               <Button type="submit" disabled={adding || newItem.trim() === ""}><Plus aria-hidden="true" />{adding ? "Adding…" : "Add round"}</Button>
             </form>
-            <p className="text-xs text-muted-foreground">{s.totalRounds} of {maxRounds} rounds on your plan. It plays after the current rounds.</p>
-          </CardContent>
-        </Card>
-      ) : null}
+            <p className="mt-2 text-xs text-muted-foreground">It plays after the current rounds.</p>
+          </Fold>
+        ) : null}
 
-      {wantRows ? (
-        <ReviewPanel rows={rows} counts={s.reviewCounts} locked={locked} busyId={busyId} error={rowsError} onReview={review} onOpen={(x) => setViewing(x.submissionId)} />
-      ) : null}
-
-      <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
-        <Card className="content-start">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2"><Users aria-hidden="true" className="size-5 text-primary" /> Players</span>
-              <span className="text-base font-semibold text-muted-foreground">{s.playerCount}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {players.length === 0 ? (
-              <p className="flex items-center gap-2 text-muted-foreground"><Hourglass aria-hidden="true" className="size-4" /> No players.</p>
-            ) : (
-              <ul className="flex flex-wrap gap-2" aria-label="Players">
-                {players.map((p) => <li key={p.id} className="rounded-full bg-secondary px-4 py-1.5 font-display font-semibold text-secondary-foreground">{p.nickname}</li>)}
-              </ul>
-            )}
-            <p className="mt-3 text-xs text-muted-foreground">New players can&apos;t join once the game has started.</p>
-          </CardContent>
-        </Card>
-        <div className="self-end">
+        <div className="flex justify-end">
           <Button variant="ghost" className="text-destructive hover:bg-destructive/10" disabled={busy !== null} onClick={() => setConfirmEnd(true)}>End game now</Button>
         </div>
       </div>
 
-      <PhotoViewer row={viewingRow} rows={rows ?? []} locked={locked} busy={busyId !== null} prompt={r?.prompt ?? null} onClose={() => setViewing(null)} onReview={review} onNavigate={(x) => setViewing(x.submissionId)} />
+      <PhotoViewer row={viewingRow} rows={rows ?? []} locked={locked} busy={busyId !== null} prompt={itemHidden ? null : r?.prompt ?? null} onClose={() => setViewing(null)} onReview={review} onNavigate={(x) => setViewing(x.submissionId)} />
 
       <Modal
         open={confirmWinner} onClose={() => setConfirmWinner(false)}
@@ -308,8 +426,8 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
         description="This is final: the round's result can't be changed afterwards."
         footer={
           <>
-            <Button variant="outline" onClick={() => setConfirmWinner(false)} disabled={busy !== null}>Keep reviewing</Button>
-            <Button onClick={declare} disabled={busy !== null}>
+            <Button variant="outline" className={FOOT} onClick={() => setConfirmWinner(false)} disabled={busy !== null}>Keep reviewing</Button>
+            <Button className={FOOT} onClick={declare} disabled={busy !== null}>
               {busy === "announce_winner" ? "Announcing…" : confirmation.kind === "winner" ? `Yes, announce ${confirmation.leader.nickname}` : "Yes, no winner"}
             </Button>
           </>
@@ -317,13 +435,13 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
       >
         {confirmation.kind === "winner" ? (
           <div className="grid gap-3">
-            <div className="flex items-center gap-3 rounded-2xl bg-brand-yellow/25 p-3">
+            <div className="flex min-w-0 items-center gap-3 rounded-2xl bg-brand-yellow/25 p-3">
               {rows?.find((x) => x.playerId === confirmation.leader.playerId)?.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={rows.find((x) => x.playerId === confirmation.leader.playerId)!.photoUrl!} alt={`Photo from ${confirmation.leader.nickname}`} className="size-20 rounded-xl bg-black object-cover" />
               ) : null}
-              <div>
-                <p className="font-display text-2xl font-bold text-primary">{confirmation.leader.nickname}</p>
+              <div className="min-w-0">
+                <p className="break-words font-display text-2xl font-bold text-primary">{confirmation.leader.nickname}</p>
                 <p className="font-mono text-xl font-bold tabular-nums">{formatElapsed(confirmation.leader.rankMs)}</p>
                 <p className="text-sm text-muted-foreground">Fastest approved photo</p>
               </div>
@@ -348,6 +466,12 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
       </Modal>
 
       <ConfirmDialog
+        open={confirmReplay} busy={busy !== null} destructive={false}
+        title={`Replay round ${r?.no ?? ""}?`} confirmLabel="Replay round"
+        description={`Everyone gets a new countdown and the full time to bring ${r?.prompt ? `“${r.prompt}”` : "the same item"}. Photos from the ended hunt are set aside, and it counts as no winner. It doesn't use up a round on your plan.`}
+        onClose={() => setConfirmReplay(false)} onConfirm={() => void replay()}
+      />
+      <ConfirmDialog
         open={confirmEnd} busy={busy !== null} title="End the game now?" confirmLabel="End game"
         description="The game stops for everyone and players are told it's over. This can't be undone."
         onClose={() => setConfirmEnd(false)}
@@ -357,11 +481,17 @@ export function HostConsole({ gameId, initial, initialPlayers, maxRounds = 0 }: 
   );
 }
 
-function Stat({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+/** A collapsed section, so the main step stays the only thing competing for attention. */
+function Fold({ icon, title, meta, children }: { icon: React.ReactNode; title: string; meta?: string; children: React.ReactNode }) {
   return (
-    <div className={cn("min-w-0", wide && "col-span-2 sm:col-span-1")}>
-      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="truncate font-display text-xl font-bold text-primary" title={value}>{value}</p>
-    </div>
+    <details className="group rounded-3xl border bg-card shadow-card">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-3xl px-5 py-4 font-display text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2">{icon}{title}</span>
+        <span className="flex items-center gap-2 text-base text-muted-foreground">
+          {meta}<ChevronDown aria-hidden="true" className="size-5 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+        </span>
+      </summary>
+      <div className="px-5 pb-5">{children}</div>
+    </details>
   );
 }

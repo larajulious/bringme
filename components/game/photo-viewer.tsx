@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect } from "react";
 
 import { ReviewButtons, flagText, type Decision, type LiveSubmission } from "@/components/game/review-panel";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,22 @@ export function PhotoViewer({
   const rival = row?.nearTie ? rows.filter((r) => r.submissionId !== row.submissionId && r.status !== "rejected").sort((a, b) => Math.abs(a.rankMs - row.rankMs) - Math.abs(b.rankMs - row.rankMs))[0] : undefined;
   const live = row ? rows.find((r) => r.submissionId === row.submissionId) ?? row : null; // always the freshest decision
 
+  // Keyboard (desktop): A approve, D disqualify, ← → previous / next. Not during a close-finish comparison,
+  // where each photo has its own buttons, and never while typing.
+  useEffect(() => {
+    if (!live) return;
+    const on = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || (e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable]")) return;
+      const k = e.key.toLowerCase();
+      if (k === "arrowleft" && index > 0) { e.preventDefault(); onNavigate(rows[index - 1]); }
+      else if (k === "arrowright" && index >= 0 && index < rows.length - 1) { e.preventDefault(); onNavigate(rows[index + 1]); }
+      else if (!locked && !rival && !busy && k === "a" && live.status !== "approved") { e.preventDefault(); onReview(live.submissionId, "approve"); }
+      else if (!locked && !rival && !busy && k === "d" && live.status !== "rejected") { e.preventDefault(); onReview(live.submissionId, "disqualify"); }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [live, index, rows, locked, rival, busy, onNavigate, onReview]);
+
   return (
     <Modal open={row !== null} onClose={onClose} title={live ? `${live.nickname}: ${formatElapsed(live.rankMs)}` : "Photo"} description={prompt ? `Does it show: ${prompt}?` : undefined} className="max-w-4xl">
       {live ? (
@@ -54,9 +71,12 @@ export function PhotoViewer({
           {rival ? <p className="rounded-2xl bg-brand-yellow/30 px-4 py-2 text-sm font-semibold text-brand-night">Close finish: only {Math.abs(live.rankMs - rival.rankMs)} ms apart. Decide from the photos.</p> : null}
           {!rival && !locked ? <ReviewButtons row={live} disabled={busy} onReview={onReview} size="default" /> : null}
           <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" size="sm" disabled={index <= 0} onClick={() => onNavigate(rows[index - 1])}><ChevronLeft aria-hidden="true" /> Faster</Button>
-            <span className="text-sm text-muted-foreground">{index + 1} of {rows.length}</span>
-            <Button variant="outline" size="sm" disabled={index < 0 || index >= rows.length - 1} onClick={() => onNavigate(rows[index + 1])}>Slower <ChevronRight aria-hidden="true" /></Button>
+            <Button variant="outline" className="px-3 sm:px-5" disabled={index <= 0} onClick={() => onNavigate(rows[index - 1])}><ChevronLeft aria-hidden="true" /> Faster</Button>
+            <span className="grid text-center text-sm text-muted-foreground">
+              {index + 1} of {rows.length}
+              {!locked && !rival ? <span className="hidden text-xs sm:block">Keys: A approve · D reject · ← →</span> : null}
+            </span>
+            <Button variant="outline" className="px-3 sm:px-5" disabled={index < 0 || index >= rows.length - 1} onClick={() => onNavigate(rows[index + 1])}>Slower <ChevronRight aria-hidden="true" /></Button>
           </div>
         </div>
       ) : null}
