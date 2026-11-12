@@ -150,11 +150,11 @@ function PlayerGameInner({ code, initial }: { code: string; initial: PlayerSnaps
     const left = secondsUntil(end, now, offsetMs);
     body = (
       <div className="grid justify-items-center gap-3 short:gap-2">
-        <h1 className="sr-only">{left > 0 ? `${header} starts in ${left}` : `${header}: go!`}</h1>
+        <h1 className="sr-only">{left > 0 ? `${header} starts in ${left}` : s.phase === "countdown" ? `${header}: waiting for the Game Master to reveal the item` : `${header}: go!`}</h1>
         <p className="inline-block rounded-full bg-white/12 px-4 py-1.5 text-sm font-bold uppercase tracking-widest text-white/90">{header}</p>
-        <p className="text-lg text-white/80 tiny:text-base">{left > 0 ? "Get ready…" : "Bring it!"}</p>
-        <Countdown left={left} />
-        {left === 0 && s.phase === "countdown" ? <p className="text-lg text-white/80">The Game Master is about to start…</p> : null}
+        <p className="text-lg text-white/80 tiny:text-base">{left > 0 ? "Get ready…" : s.phase === "countdown" ? "Hold tight…" : "Bring it!"}</p>
+        <Countdown left={left} holdAtZero={s.phase === "countdown"} />
+        {left === 0 && s.phase === "countdown" ? <p className="text-lg text-white/80">The Game Master will reveal the item in a moment.</p> : null}
         {cam.status !== "ready" ? <div className="mt-2 short:mt-0"><CameraGate compact /></div> : null}
       </div>
     );

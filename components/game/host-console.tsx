@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag, Hourglass, Play, Trophy, Users } from "lucide-react";
+import { Flag, Hourglass, Play, RotateCcw, Trophy, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
@@ -124,7 +124,16 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
 
   let actions: React.ReactNode = null;
   if (s.phase === "lobby") actions = s.roundsRemaining > 0 ? primary("Start countdown", "start_countdown", { icon: <Play aria-hidden="true" className="!size-6" /> }) : finishBtn;
-  else if (s.phase === "countdown") actions = primary("Start round", "start_round", { icon: <Play aria-hidden="true" className="!size-6" /> });
+  else if (s.phase === "countdown") {
+    actions = (
+      <>
+        {primary("Reveal item & start round", "start_round", { icon: <Play aria-hidden="true" className="!size-6" /> })}
+        <Button size="lg" variant="outline" className="h-16 w-full text-xl sm:w-auto sm:px-6" disabled={busy !== null} onClick={() => void send("restart_countdown")}>
+          <RotateCcw aria-hidden="true" className="!size-6" />{busy === "restart_countdown" ? "Working…" : "Replay 3-2-1"}
+        </Button>
+      </>
+    );
+  }
   else if (s.phase === "active" && r) actions = r.status === "open" ? primary("Close submissions", "close_submissions", { disabled: !started }) : primary("Move to review", "move_to_review");
   else if (s.phase === "reviewing") {
     actions = primary(confirmation.kind === "winner" ? "Declare winner…" : "Declare no winner…", "announce_winner", {
@@ -134,7 +143,8 @@ export function HostConsole({ gameId, initial, initialPlayers }: { gameId: strin
 
   const nextOnScreen: Record<string, string> = {
     start_countdown: "Shows the 3-2-1 countdown.",
-    start_round: "Reveals the item and starts the timer.",
+    restart_countdown: "Replays the 3-2-1 countdown.",
+    start_round: "Reveals the item and starts the timer. Players see “Get set…” until you press it.",
     close_submissions: "Shows “Time's up” and stops new photos.",
     move_to_review: "Shows “Judging time!”.",
     announce_winner: "Reveals the winner (or no winner) to everyone.",

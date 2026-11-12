@@ -69,7 +69,7 @@ export function ProjectorStage({
     let main: ReactNode;
     if (s.phase === "countdown") {
       const left = secondsUntil(s.countdownEndsAt, now, offsetMs);
-      main = <Countdown left={left} large={big} flash="absolute" />;
+      main = <Countdown left={left} large={big} flash="absolute" holdAtZero />;
     } else if (s.phase === "active" && r) {
       main = (
         <div className="grid justify-items-center gap-4">

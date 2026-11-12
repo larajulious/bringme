@@ -77,7 +77,7 @@ export type PlayerSnapshot = GameSnapshot & {
 export type HostSnapshot = GameSnapshot & { joinCode?: string };
 
 export const HOST_ACTIONS = [
-  "start_game", "start_countdown", "start_round", "close_submissions",
+  "start_game", "start_countdown", "restart_countdown", "start_round", "close_submissions",
   "move_to_review", "announce_winner", "next_round", "end_game", "cancel", "archive",
 ] as const;
 export type HostAction = (typeof HOST_ACTIONS)[number];
