@@ -27,10 +27,12 @@ const logoVariants = cva(
 type LogoProps = VariantProps<typeof logoVariants> & {
   href?: string;
   className?: string;
+  /** Hero only: the "!" now and then crouches, backflips and lands with a wobble (CSS, transform-only; at rest with reduced motion). */
+  bang?: boolean;
 };
 
 /** Text/CSS wordmark. Pass `href` to render it as a home link. */
-export function Logo({ size, tone, href, className }: LogoProps) {
+export function Logo({ size, tone, href, className, bang = false }: LogoProps) {
   const mark = (
     <span
       className={cn(logoVariants({ size, tone }), className)}
@@ -49,7 +51,10 @@ export function Logo({ size, tone, href, className }: LogoProps) {
       </span>
       <span
         aria-hidden="true"
-        className="ml-[0.02em] inline-block rotate-12 text-brand-coral"
+        className={cn(
+          "ml-[0.02em] inline-block rotate-12 text-brand-coral",
+          bang && "origin-[50%_70%] animate-bang [animation-delay:1.4s] motion-reduce:animate-none",
+        )}
       >
         !
       </span>

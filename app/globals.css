@@ -263,6 +263,26 @@ html[data-fit-viewport] body {
 
 @keyframes marquee { to { transform: translateX(-50%); } }
 
+/*
+ * Logo "!" (components/brand/logo.tsx, `bang`): idles with a lazy sway, then crouches, springs into a backflip,
+ * lands with a squish and wobbles back to its 12° tilt. The flip ends at 372deg (= 12deg), so the loop restarts
+ * without spinning backwards; that end state is also the resting pose for reduced motion.
+ */
+@keyframes bang {
+  0% { transform: rotate(12deg); }
+  18% { transform: rotate(17deg); }
+  36% { transform: rotate(8deg); }
+  50% { transform: rotate(12deg); }
+  56% { transform: rotate(12deg) scale(1.2, 0.7); animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1); }
+  64% { transform: translateY(-0.55em) rotate(-10deg) scale(0.82, 1.25); animation-timing-function: ease-out; }
+  71% { transform: translateY(-0.72em) rotate(190deg) scale(1); animation-timing-function: ease-in; }
+  78% { transform: translateY(0) rotate(372deg) scale(1.22, 0.72); animation-timing-function: cubic-bezier(0.3, 1.6, 0.5, 1); }
+  84% { transform: rotate(363deg) scale(0.93, 1.1); }
+  89% { transform: rotate(379deg) scale(1.03, 0.98); }
+  94% { transform: rotate(368deg); }
+  100% { transform: rotate(372deg); }
+}
+
 /* Scroll reveal (components/marketing/reveal.tsx). Without JS or with reduced motion, nothing is hidden. */
 @media (prefers-reduced-motion: no-preference) {
   .reveal-item {

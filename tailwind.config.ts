@@ -111,6 +111,7 @@ export default {
         "winner-loop": "winner-loop 6s ease-out infinite",
         hop: "hop 0.7s cubic-bezier(0.34,1.56,0.64,1)",
         marquee: "marquee 45s linear infinite",
+        bang: "bang 4.6s ease-in-out infinite",
       },
     },
   },

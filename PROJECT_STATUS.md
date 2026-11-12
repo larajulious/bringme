@@ -1,6 +1,6 @@
 # BringMe! — Project Status
 
-_Last updated: 2026-11-13 (Homepage scroll story: Snappy runs solo; homepage header without logo. Earlier: BingoSnap Phase 10: polish; Phase 9: host validation dashboard; Phase 8: server-enforced timer + reliable submissions; Phase 7: completion engine + Submit; Phase 6: local photo capture, browser-only; BingoSnap migrations 17–21 not yet applied to the hosted DB. Earlier: Passwordless Email OTP sign-in replaces password login/sign-up; browser-checked with stubbed Supabase, **not yet run against the hosted project or a real inbox**. Earlier: admin plan edits synchronise to Polar (migration 14), not run against the Polar sandbox. **Not launch-ready**: see GAME_PASS_QA_REPORT.md blockers.)_
+_Last updated: 2026-11-13 (Homepage scroll story: Snappy runs solo; homepage header centred on phones. Earlier: BingoSnap Phase 10: polish; Phase 9: host validation dashboard; Phase 8: server-enforced timer + reliable submissions; Phase 7: completion engine + Submit; Phase 6: local photo capture, browser-only; BingoSnap migrations 17–21 not yet applied to the hosted DB. Earlier: Passwordless Email OTP sign-in replaces password login/sign-up; browser-checked with stubbed Supabase, **not yet run against the hosted project or a real inbox**. Earlier: admin plan edits synchronise to Polar (migration 14), not run against the Polar sandbox. **Not launch-ready**: see GAME_PASS_QA_REPORT.md blockers.)_
 
 ## Product
 Real-time party game with three roles: **Super Admin** (platform owner), **Subscriber / Game Master** (hosts games), **Player** (joins via QR, no registration).
@@ -38,7 +38,8 @@ Real-time party game with three roles: **Super Admin** (platform owner), **Subsc
   - 60 fps (p95 16.7–16.8 ms, 0 long tasks, also at 4× CPU on 390 px);
   - engine cleans up on navigation.
   Not checked in Safari/Firefox or on a real phone.
-- Header (same day): homepage only, "Get started" replaces the header logo on the left, "Sign in" on the right (`SiteHeader brand={false}`, `AuthButton split`); Terms/Privacy keep the logo.
+- Hero logo "!" (`<Logo bang />`, homepage hero only): every 4.6s it idles with a sway, crouches, backflips, lands with a squish and wobbles back to its 12° tilt. `bang` keyframes in globals.css, transform-only. Reduced motion: no animation, resting tilt.
+- Header (homepage only, `SiteHeader compactMobile`): below `sm` (640px) the header logo is hidden and "Sign in" + "Get started" are centred, since the big hero logo sits right below; from `sm` up it's logo left, actions right. Terms/Privacy keep the logo on phones (their only link home).
 
 ## Auth: disposable email protection (2026-11-12)
 - **Enforcement:** the Supabase **Before User Created** Postgres hook (`public.hook_before_user_created`, migrations 29 + 30) refuses temporary inboxes for every signup path, including direct Auth API calls. Nothing is created and no email is sent. Sign-in, existing accounts, passes and Polar are untouched.
