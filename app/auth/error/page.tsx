@@ -6,11 +6,13 @@ import { Suspense } from "react";
 import { AuthPage } from "@/components/auth/auth-page";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { OTP_LENGTH } from "@/lib/auth/otp";
 
 export const metadata: Metadata = { title: "Sign-in problem", robots: { index: false, follow: false } };
 
 const messages: Record<string, string> = {
-  link_invalid: "That link is invalid or has expired. Please request a new one.",
+  // Email links are no longer used for sign-in (an old email or a mis-set template can still carry one).
+  link_invalid: `That email link has expired or was already used. Bring Me now signs you in with a ${OTP_LENGTH}-digit code: go back, enter your email and type the code from the newest email.`,
   profile_missing: "We couldn't load your account. Please sign in again or contact support.",
   profile_lookup_failed: "We couldn't reach your account details right now. Please try again in a moment.",
 };
@@ -22,7 +24,7 @@ async function Content({ searchParams }: { searchParams: Promise<{ error?: strin
       icon={<TriangleAlert />}
       title="Sorry, something went wrong"
       description={(error && messages[error]) || "Please try signing in again."}
-      action={<Button asChild><Link href="/auth/login">Back to sign in</Link></Button>}
+      action={<Button asChild><Link href="/auth/login">Get a sign-in code</Link></Button>}
     />
   );
 }
