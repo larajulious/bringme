@@ -77,7 +77,7 @@ export function Audience() {
               className={cn("reveal-item grid overflow-hidden rounded-4xl bg-card shadow-card ring-1 ring-primary/10 md:grid-cols-2", i % 2 ? "reveal-right" : "reveal-left")}
               style={{ "--i": i + 2 } as React.CSSProperties}
             >
-              <div className={cn("relative isolate grid min-h-72 place-items-center overflow-hidden p-8", i % 2 && "md:order-2")}>
+              <div className={cn("relative isolate grid min-h-72 place-items-center overflow-hidden px-6 py-8 sm:p-8", i % 2 && "md:order-2")}>
                 {r.panel}
                 {r.scene}
               </div>

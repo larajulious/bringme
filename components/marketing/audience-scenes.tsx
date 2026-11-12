@@ -61,7 +61,7 @@ export function PhoneScene() {
           <span className="sr-only"> the demo room as a new player</span>
         </button>
       </div>
-      <TryHint show={!joined} className="-right-6 -top-4 sm:-right-[6.5rem] sm:top-[42%]" />
+      <TryHint show={!joined} className="-right-6 -top-4 lg:-right-[6.5rem] lg:top-[42%]" />
     </div>
   );
 }
@@ -93,8 +93,8 @@ export function ProjectorScene() {
   const item = round === 0 ? "a red stapler" : ITEMS[(round - 1) % ITEMS.length];
 
   return (
-    <div className="relative">
-      <div className="grid w-72 gap-3 rounded-2xl border-4 border-white/15 bg-brand-night/60 p-5 text-center text-white shadow-[0_18px_40px_-12px_rgb(0_0_0/0.5)]">
+    <div className="relative w-full max-w-72">
+      <div className="grid w-full gap-3 rounded-2xl border-4 border-white/15 bg-brand-night/60 p-5 text-center text-white shadow-[0_18px_40px_-12px_rgb(0_0_0/0.5)]">
         <span className="text-[0.65rem] font-bold uppercase tracking-widest text-white/70">Round {Math.max(1, round)} · Bring me…</span>
         <span key={round} className="animate-pop-in font-display text-2xl font-bold leading-none text-brand-yellow" aria-live="polite">{item}</span>
         <span aria-hidden="true" className="flex items-center gap-2">
@@ -102,6 +102,8 @@ export function ProjectorScene() {
           <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/15">
             <span key={round} className={cn("block h-full origin-left rounded-full bg-brand-coral", round > 0 && "animate-[drain-once_3s_linear_forwards]")} />
           </span>
+          {/* mirrors the clock icon so the bar is centred under the item and the button */}
+          <span className="size-4 shrink-0" />
         </span>
         <div className="grid h-7 place-items-center">
           {winner ? (
