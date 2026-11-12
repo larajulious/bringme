@@ -1,19 +1,12 @@
 <!--
   Supabase → Authentication → Email Templates → "Magic Link"
   Subject: Your Bring Me! code: {{ .Token }}
-  Sent to an email that already has an account. The app's sign-in screen asks for this code.
-  The button is a backup: it works on any device and goes straight to the production site's
-  /auth/confirm. It doesn't depend on Supabase's Site URL or Redirect URLs, so it can never be localhost.
-  (Testing locally? Type the code; the button always opens production.)
+  Supabase sends this template to an email that already has an account. It shows ONLY the sign-in code
+  (no link): typing it on the sign-in screen signs the host in.
 -->
 <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1f1147;">
-  <h1 style="font-size: 22px; margin: 0 0 12px;">Your Bring Me! sign-in code</h1>
-  <p style="margin: 0 0 16px;">Type this code on the sign-in screen to sign in:</p>
+  <h1 style="font-size: 22px; margin: 0 0 12px;">Your Bring Me! code</h1>
+  <p style="margin: 0 0 16px;">Enter this code on the sign-in screen:</p>
   <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; margin: 0 0 16px; color: #4c1d95;">{{ .Token }}</p>
-  <p style="margin: 0 0 20px;">Or tap the button on the device where you want to be signed in:</p>
-  <p style="margin: 0 0 24px;">
-    <a href="https://bringme.fun/auth/confirm?token_hash={{ .TokenHash }}&type=email"
-       style="background: #facc15; color: #1f1147; padding: 12px 20px; border-radius: 12px; text-decoration: none; font-weight: bold; display: inline-block;">Sign in</a>
-  </p>
-  <p style="font-size: 13px; color: #6b6489; margin: 0;">The code and the button work once and expire in an hour. If you didn't ask for this, you can ignore this email.</p>
+  <p style="font-size: 13px; color: #6b6489; margin: 0;">It works once and expires in an hour. If you didn't ask for it, you can ignore this email.</p>
 </div>

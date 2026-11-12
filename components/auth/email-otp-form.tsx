@@ -240,7 +240,7 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
                 describedBy={error ? "otp-error" : "otp-hint"}
               />
               <p id="otp-hint" className="text-xs text-muted-foreground">
-                Can&apos;t find it? Check your spam or promotions folder. Got a <strong className="font-semibold">Confirm</strong> or <strong className="font-semibold">Sign in</strong> button instead of a code? Tap it: it signs you in too, and this page continues by itself.
+                Can&apos;t find it? Check your spam or promotions folder.
               </p>
             </div>
             <FormError id="otp-error">{error}</FormError>

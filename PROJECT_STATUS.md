@@ -19,9 +19,9 @@ Real-time party game with three roles: **Super Admin** (platform owner), **Subsc
 - **Code:**
   - `email-otp-form.tsx` passes `emailRedirectTo: <origin>/auth/confirm`, so a failed link lands on `/auth/error` of the right site;
   - `proxy.ts` redirects any non-auth page carrying `?error_code=` to `/auth/error?error=link_invalid` (covers links already sent). Checked on a production build: `/?error_code=otp_expired` → 307 `/auth/error?error=link_invalid`, plain `/` → 200.
-- **First-time hosts got a "Confirm your email address" link instead of a code:** Supabase sends the *Confirm signup* template to new emails, and its default has no `{{ .Token }}`. Paste-ready templates are in `supabase/templates/confirm-signup.html` and `magic-link.html`: the code plus a cross-device backup button `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email` (handled by `/auth/confirm`; never the Site URL). supabase/README.md updated. The code screen now says a Confirm / Sign in button also works, and it continues by itself when the session appears.
+- **First-time hosts got a "Confirm your email address" link instead of a code:** Supabase sends the *Confirm signup* template to new emails, and its default has no `{{ .Token }}`. Paste-ready **code-only** templates (no "confirm your email" wording, no link) are in `supabase/templates/confirm-signup.html` and `magic-link.html`; supabase/README.md updated.
 - **No localhost in production, whatever the settings:**
-  - the template backup button is hard-coded to `https://bringme.fun/auth/confirm?token_hash=…`, so it doesn't depend on Supabase's Site URL or Redirect URLs;
+  - the templates contain no link at all, so they can't point at localhost;
   - `resolveSiteUrl` gives production builds without `NEXT_PUBLIC_SITE_URL` / Vercel vars `https://bringme.fun` (as configured, so `redirectBase` uses it instead of a proxy's internal `localhost` origin). This covers QR codes, join links, checkout return URLs and the `/auth/confirm` / `/auth/continue` redirects. +1 unit test.
 - **Dashboard (manual, required):** Authentication → URL Configuration: Site URL `https://bringme.fun`; Redirect URLs `https://bringme.fun/**` and `http://localhost:3000/**`. Optionally remove `{{ .ConfirmationURL }}` from the Magic Link and Confirm signup templates (code-only sign-in; scanners can't consume a code).
 
