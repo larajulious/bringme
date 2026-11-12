@@ -62,6 +62,10 @@ describe("pending verification (refresh recovery)", () => {
   it("restores only a valid email + timestamp", () => {
     assert.deepEqual(parsePending(JSON.stringify({ email: "a@b.co", sentAt: now - 1000 }), now), { email: "a@b.co", sentAt: now - 1000 });
   });
+  it("keeps the confirmation-link step, ignores any other kind", () => {
+    assert.deepEqual(parsePending(JSON.stringify({ email: "a@b.co", sentAt: now, kind: "link" }), now), { email: "a@b.co", sentAt: now, kind: "link" });
+    assert.deepEqual(parsePending(JSON.stringify({ email: "a@b.co", sentAt: now, kind: "admin" }), now), { email: "a@b.co", sentAt: now });
+  });
   it("drops anything extra, malformed, stale or from the future", () => {
     assert.deepEqual(parsePending(JSON.stringify({ email: "a@b.co", sentAt: now, code: "123456" }), now), { email: "a@b.co", sentAt: now });
     for (const raw of [null, "", "{", "[]", JSON.stringify({ email: "nope", sentAt: now }), JSON.stringify({ email: "a@b.co" }),

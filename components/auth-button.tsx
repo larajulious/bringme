@@ -13,13 +13,13 @@ export async function AuthButton() {
       <Link href="/auth/continue">Dashboard</Link>
     </Button>
   ) : (
-    // Both go to the same passwordless page, which explains that sign-in and sign-up are one step.
+    // Same passwordless page; "Get started" opens it on the Create account tab.
     <div className="flex gap-2">
       <Button asChild size="sm" variant="outline-light">
         <Link href="/auth/login">Sign in</Link>
       </Button>
       <Button asChild size="sm">
-        <Link href="/auth/login">Get started</Link>
+        <Link href="/auth/login?mode=signup">Get started</Link>
       </Button>
     </div>
   );

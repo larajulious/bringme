@@ -43,8 +43,11 @@ export function retryAfterMs(error: unknown): number | null {
   return m ? Number(m[1]) * 1000 : null;
 }
 
-/** Minimal state kept in sessionStorage across a refresh: never the code, never a token. */
-export type PendingVerification = { email: string; sentAt: number };
+/**
+ * Minimal state kept in sessionStorage across a refresh: never the code, never a token.
+ * `kind: "link"` = the "Create account" path, where the email carries a confirmation link (no code field).
+ */
+export type PendingVerification = { email: string; sentAt: number; kind?: "link" };
 
 export function parsePending(raw: string | null, now: number): PendingVerification | null {
   if (!raw) return null;
@@ -52,7 +55,7 @@ export function parsePending(raw: string | null, now: number): PendingVerificati
     const v = JSON.parse(raw) as Partial<PendingVerification>;
     if (typeof v.email !== "string" || typeof v.sentAt !== "number") return null;
     if (!isValidEmail(v.email) || v.sentAt > now + 5_000 || now - v.sentAt > PENDING_TTL_MS) return null;
-    return { email: v.email, sentAt: v.sentAt };
+    return v.kind === "link" ? { email: v.email, sentAt: v.sentAt, kind: "link" } : { email: v.email, sentAt: v.sentAt };
   } catch {
     return null;
   }

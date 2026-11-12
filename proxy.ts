@@ -3,11 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
   // Supabase Auth sends a failed email link (expired / already used) to its redirect URL with
-  // ?error=…&error_code=… (e.g. the home page). Show the friendly "link expired" page instead.
+  // ?error=…&error_code=… (e.g. the home page). Send them to sign-in with a friendly notice instead.
   const { pathname, searchParams } = request.nextUrl;
   if (searchParams.has("error_code") && !pathname.startsWith("/auth/") && !pathname.startsWith("/api/")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/error";
+    url.pathname = "/auth/login";
     url.search = "?error=link_invalid";
     return NextResponse.redirect(url);
   }

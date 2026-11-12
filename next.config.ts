@@ -29,6 +29,8 @@ const nextConfig: NextConfig = {
       permanent: false,
     }));
     return [
+      // Auth errors are shown on the sign-in page (?error= is kept); this catches old /auth/error URLs.
+      { source: "/auth/error", destination: "/auth/login", permanent: false },
       // One canonical host: Supabase session cookies are host-only, so a sign-in on the apex
       // would be lost when /auth/continue redirects to www (bounce back to /auth/login).
       {

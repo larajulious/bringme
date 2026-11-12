@@ -41,7 +41,7 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
 export async function requireSubscriberPage() {
   const session = await getSession();
   if (!session) redirect("/auth/login?reason=expired");
-  if (!session.profile) redirect(`/auth/error?error=${session.profileLookupFailed ? "profile_lookup_failed" : "profile_missing"}`);
+  if (!session.profile) redirect(`/auth/login?error=${session.profileLookupFailed ? "profile_lookup_failed" : "profile_missing"}`);
   if (session.profile.role === "super_admin") redirect("/admin/dashboard");
   // Existing sessions of a deactivated account stop working immediately (the auth ban also blocks refresh).
   if (session.profile.deactivated_at) redirect("/auth/login?error=deactivated");

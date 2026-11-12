@@ -72,7 +72,7 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
                 <Feature>Starts automatically when you sign up</Feature>
               </ul>
               <Button asChild variant="secondary" className="mt-auto w-full">
-                <Link href="/auth/login?next=/dashboard">Start free</Link>
+                <Link href="/auth/login?mode=signup&next=/dashboard">Start free</Link>
               </Button>
             </article>
           </li>

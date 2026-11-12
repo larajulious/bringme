@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, LogIn, Mail, UserPlus } from "lucide-react";
+import { ArrowLeft, KeyRound, Loader2, LogIn, Mail, MailCheck, UserPlus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -18,8 +18,10 @@ import {
 } from "@/lib/auth/otp";
 import { safeNext } from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 
 type Area = "subscriber" | "admin";
+type Mode = "signin" | "signup";
 
 /** "a 6-digit" / "an 8-digit" (also 11 and 18, which Supabase never uses). */
 const CODE_LABEL = `${OTP_LENGTH === 8 ? "an" : "a"} ${OTP_LENGTH}-digit`;
@@ -38,17 +40,22 @@ const store = {
 };
 
 /**
- * Unified passwordless sign-in / sign-up (Supabase Email OTP). New and returning
- * hosts use the same two steps; the client only establishes the session and
- * /auth/continue decides the destination on the server from profiles.role.
- * `area="admin"` never creates accounts (unknown emails get the same screen, no code).
+ * Passwordless sign-in / sign-up (Supabase Email OTP). The visitor picks the path explicitly,
+ * because Supabase's response is identical for new and known emails (no enumeration):
+ *   Sign in        -> shouldCreateUser=false -> code screen (unknown emails see it too, no code arrives)
+ *   Create account -> shouldCreateUser=true  -> "Check your email!" link screen (a known email gets a code
+ *                     instead, reachable from that screen without revealing whether the account exists)
+ * The client only establishes the session; /auth/continue decides the destination from profiles.role.
+ * `area="admin"` never creates accounts and always uses the code screen.
  */
 export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
   const isAdmin = area === "admin";
-  const rawNext = useSearchParams().get("next");
+  const params = useSearchParams();
+  const rawNext = params.get("next");
   const next = rawNext ? safeNext(rawNext, "") || null : null;
 
-  const [step, setStep] = useState<"email" | "verify">("email");
+  const [mode, setMode] = useState<Mode>(() => (!isAdmin && params.get("mode") === "signup" ? "signup" : "signin"));
+  const [step, setStep] = useState<"email" | "verify" | "link">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -79,19 +86,25 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
     window.location.assign(continueUrl());
   }, [continueUrl]);
 
-  // Refresh during verification: restore the code step (email + cooldown only). Never sends a code.
+  // Refresh during verification: restore the code or link step (email + cooldown only). Never sends an email.
   useEffect(() => {
     const pending = store.read();
     if (!pending) return;
     lastSent.current = pending;
     setEmail(pending.email);
     setAvailableAt(pending.sentAt + RESEND_COOLDOWN_MS);
-    setStep("verify");
-  }, []);
+    if (pending.kind === "link" && !isAdmin) {
+      setMode("signup");
+      setStep("link");
+    } else {
+      setStep("verify");
+    }
+  }, [isAdmin]);
 
-  // Focus the field for the current step (also after "Change email" / restore).
+  // Focus the field for the current step (also after "Change email" / restore). The link step has no field.
   useEffect(() => {
-    (step === "email" ? emailRef : codeRef).current?.focus();
+    if (step === "email") emailRef.current?.focus();
+    else if (step === "verify") codeRef.current?.focus();
   }, [step]);
 
   // After a rejected code the field is re-enabled: refocus and select the digits so a fix or a new code can overwrite them.
@@ -99,31 +112,33 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
     if (step === "verify" && error && !verifying) codeRef.current?.select();
   }, [step, error, verifying]);
 
-  // Verified in another tab: this tab shares the session cookie, so just move on.
+  // Verified (code) or confirmed (link) in another tab: this tab shares the session cookie, so just move on.
   useEffect(() => {
-    if (step !== "verify") return;
+    if (step === "email") return;
     const { data } = createClient().auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) goContinue();
     });
     return () => data.subscription.unsubscribe();
   }, [step, goContinue]);
 
+  /** One Supabase request per call. "Create account" may create the user; "Sign in" and admin never do. */
   const requestCode = async (target: string): Promise<boolean> => {
+    const createUser = !isAdmin && mode === "signup";
     const { error } = await createClient().auth.signInWithOtp({
       email: target,
-      // If the email also contains a link, it must come back to THIS site's confirm route (not Supabase's
-      // Site URL, which may still be localhost): a used/expired link then lands on a friendly error page.
-      options: { shouldCreateUser: !isAdmin, emailRedirectTo: `${window.location.origin}/auth/confirm` },
+      // The confirmation link must come back to THIS site's confirm route (not Supabase's Site URL,
+      // which may still be localhost): a used/expired link then lands on a friendly error page.
+      options: { shouldCreateUser: createUser, emailRedirectTo: `${window.location.origin}/auth/confirm` },
     });
-    // Admin area: an unknown email must look exactly like a known one (no enumeration, no account created).
-    if (error && !(isAdmin && (error.code === "otp_disabled" || error.code === "signup_disabled"))) {
+    // Sign-in only: an unknown email must look exactly like a known one (no enumeration, no account created).
+    if (error && !(!createUser && (error.code === "otp_disabled" || error.code === "signup_disabled"))) {
       const wait = retryAfterMs(error);
       if (wait) setAvailableAt(Date.now() + wait);
       setError(friendlyAuthError(error));
       return false;
     }
     const sentAt = Date.now();
-    lastSent.current = { email: target, sentAt };
+    lastSent.current = createUser ? { email: target, sentAt, kind: "link" } : { email: target, sentAt };
     store.write(lastSent.current);
     setAvailableAt(sentAt + RESEND_COOLDOWN_MS);
     return true;
@@ -137,13 +152,14 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
     setNotice(null);
     if (!target) return setError("Please enter your email address.");
     if (!isValidEmail(target)) return setError("That doesn't look like an email address. Please check it.");
+    const kind: "link" | undefined = !isAdmin && mode === "signup" ? "link" : undefined;
     const prev = lastSent.current;
-    if (prev && prev.email === target && Date.now() < prev.sentAt + RESEND_COOLDOWN_MS) {
-      // Same email again within the cooldown: reuse the code already on its way.
+    if (prev && prev.email === target && prev.kind === kind && Date.now() < prev.sentAt + RESEND_COOLDOWN_MS) {
+      // Same email and path again within the cooldown: reuse the email already on its way.
       store.write(prev);
       setEmail(target);
       setAvailableAt(prev.sentAt + RESEND_COOLDOWN_MS);
-      setStep("verify");
+      setStep(kind === "link" ? "link" : "verify");
       return;
     }
     busy.current = true;
@@ -153,7 +169,7 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
         setEmail(target);
         setCode("");
         lastTried.current = null;
-        setStep("verify");
+        setStep(kind === "link" ? "link" : "verify");
       }
     } finally {
       busy.current = false;
@@ -196,11 +212,15 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
     setNotice(null);
     try {
       if (await requestCode(email)) {
-        // The new code replaces the old one in Supabase; clear what was typed.
+        // The new code/link replaces the old one in Supabase; clear what was typed.
         setCode("");
         lastTried.current = null;
-        setNotice("A new code is on its way. Only the newest code will work.");
-        codeRef.current?.focus();
+        if (step === "link") {
+          setNotice("A new confirmation email is on its way. Only the newest link will work.");
+        } else {
+          setNotice("A new code is on its way. Only the newest code will work.");
+          codeRef.current?.focus();
+        }
       }
     } finally {
       busy.current = false;
@@ -217,6 +237,67 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
     lastTried.current = null;
     setStep("email");
   };
+
+  // Link screen -> code screen for the same email, without sending anything (a known email got a code).
+  const enterCodeInstead = () => {
+    if (lastSent.current) store.write({ email: lastSent.current.email, sentAt: lastSent.current.sentAt });
+    setError(null);
+    setNotice(null);
+    setStep("verify");
+  };
+
+  // Code screen (sign-in) -> create-account form, keeping the typed email.
+  const switchToSignup = () => {
+    if (verifying) return;
+    changeEmail();
+    setMode("signup");
+  };
+
+  const pickMode = (m: Mode) => {
+    if (sending) return;
+    setMode(m);
+    setError(null);
+  };
+
+  if (step === "link") {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-6 p-6 sm:p-8">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="grid size-16 place-items-center rounded-full bg-secondary text-primary" aria-hidden="true">
+              <MailCheck className="!size-8" />
+            </span>
+            <h1 className="font-display text-2xl font-bold text-primary sm:text-3xl">Check your email!</h1>
+            <p className="text-muted-foreground">
+              We&apos;ve sent a confirmation link to
+              <strong className="mt-1 block break-words font-bold text-foreground">{email}</strong>
+            </p>
+            <p className="text-muted-foreground">
+              Open your inbox and click the link to verify your account and start using Bring Me.
+            </p>
+          </div>
+          <p className="rounded-2xl bg-secondary/60 p-4 text-sm text-secondary-foreground">
+            Open the link on this device, in this browser. Can&apos;t find the email? Check your spam or promotions folder.
+          </p>
+          <FormError>{error}</FormError>
+          <FormNotice>{notice}</FormNotice>
+          <div className="flex flex-col items-center gap-1 text-sm">
+            <ResendButton availableAt={availableAt} sending={sending} disabled={false} onResend={resend}
+              label="Resend confirmation email" waitLabel="Resend email in" />
+            <Button type="button" variant="link" size="sm" onClick={changeEmail} className="text-muted-foreground">
+              <ArrowLeft className="!size-4" aria-hidden="true" /> Use a different email
+            </Button>
+          </div>
+          <p className="border-t border-border pt-4 text-center text-sm text-muted-foreground">
+            Already have an account? Then we&apos;ve emailed you a sign-in code instead.{" "}
+            <Button type="button" variant="link" size="sm" onClick={enterCodeInstead} className="h-auto p-0 align-baseline">
+              <KeyRound className="!size-4" aria-hidden="true" /> Enter code
+            </Button>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (step === "verify") {
     return (
@@ -241,6 +322,7 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
               />
               <p id="otp-hint" className="text-xs text-muted-foreground">
                 Can&apos;t find it? Check your spam or promotions folder.
+                {!isAdmin ? " If the email has a confirmation link instead, click that link to finish." : null}
               </p>
             </div>
             <FormError id="otp-error">{error}</FormError>
@@ -254,6 +336,14 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
             <Button type="button" variant="link" size="sm" onClick={changeEmail} disabled={verifying} className="text-muted-foreground">
               <ArrowLeft className="!size-4" aria-hidden="true" /> Change email
             </Button>
+            {!isAdmin && mode === "signin" ? (
+              <p className="mt-2 text-center text-muted-foreground">
+                New to Bring Me?{" "}
+                <Button type="button" variant="link" size="sm" onClick={switchToSignup} disabled={verifying} className="h-auto p-0 align-baseline">
+                  Create an account
+                </Button>
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -265,9 +355,33 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
       <CardContent className="flex flex-col gap-6 p-6 sm:p-8">
         <Header
           mood="happy"
-          title={isAdmin ? "Super Admin sign in" : "Welcome to Bring Me"}
-          description={isAdmin ? `Restricted area. We'll email you ${CODE_LABEL} code.` : "Enter your email to get started. No password needed."}
+          title={isAdmin ? "Super Admin sign in" : mode === "signup" ? "Create your account" : "Welcome back"}
+          description={
+            isAdmin ? `Restricted area. We'll email you ${CODE_LABEL} code.`
+              : mode === "signup" ? "Enter your email and we'll send you a confirmation link. No password needed."
+                : `Enter your email and we'll send you ${CODE_LABEL} sign-in code. No password needed.`
+          }
         />
+        {!isAdmin ? (
+          <div role="radiogroup" aria-label="Sign in or create an account" className="grid grid-cols-2 gap-1 rounded-2xl bg-secondary p-1">
+            {([["signin", "Sign in", LogIn], ["signup", "Create account", UserPlus]] as const).map(([m, label, Icon]) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                onClick={() => pickMode(m)}
+                disabled={sending}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-xl px-3 py-2 font-display text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:opacity-60 sm:text-base",
+                  mode === m ? "bg-primary text-primary-foreground shadow-pop-purple" : "text-primary hover:bg-primary/10",
+                )}
+              >
+                <Icon className="size-4 shrink-0" aria-hidden="true" /> {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <form onSubmit={submitEmail} className="flex flex-col gap-5" noValidate>
           <div className="grid gap-2">
             <Label htmlFor="email">Email address</Label>
@@ -293,20 +407,20 @@ export function EmailOtpForm({ area = "subscriber" }: { area?: Area }) {
           </div>
           <FormError id="email-error">{error}</FormError>
           <Button type="submit" size="lg" className="w-full" disabled={sending}>
-            {sending ? <><Loader2 className="motion-safe:animate-spin" aria-hidden="true" /> Sending code…</> : <><Mail aria-hidden="true" /> Continue with Email</>}
+            {sending ? (
+              <><Loader2 className="motion-safe:animate-spin" aria-hidden="true" /> {!isAdmin && mode === "signup" ? "Sending link…" : "Sending code…"}</>
+            ) : !isAdmin && mode === "signup" ? (
+              <><UserPlus aria-hidden="true" /> Create account</>
+            ) : (
+              <><Mail aria-hidden="true" /> Email me a code</>
+            )}
           </Button>
           {!isAdmin ? (
-            // One form for everyone: say so plainly, so new hosts don't go hunting for a "Sign up" link.
-            <ul aria-label="Signing in and signing up are the same step" className="grid gap-2 rounded-2xl bg-secondary/60 p-4 text-sm text-secondary-foreground">
-              <li className="flex items-start gap-3">
-                <UserPlus className="mt-0.5 !size-4 shrink-0 text-primary" aria-hidden="true" />
-                <span><strong className="font-bold">New here?</strong> No sign-up form. We create your account when you enter the code, and your free trial starts.</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <LogIn className="mt-0.5 !size-4 shrink-0 text-primary" aria-hidden="true" />
-                <span><strong className="font-bold">Been here before?</strong> Use the same email to sign back in to your games and passes.</span>
-              </li>
-            </ul>
+            <p className="text-center text-sm text-muted-foreground">
+              {mode === "signup"
+                ? "Your free trial starts as soon as you confirm your email."
+                : "Use the same email to get back to your games and passes."}
+            </p>
           ) : null}
         </form>
       </CardContent>
@@ -325,7 +439,9 @@ function Header({ title, description, mood }: { title: string; description: Reac
 }
 
 /** Owns its own 1 s tick so the countdown never re-renders (or resets) the code field. */
-function ResendButton({ availableAt, sending, disabled, onResend }: { availableAt: number; sending: boolean; disabled: boolean; onResend: () => void }) {
+function ResendButton({ availableAt, sending, disabled, onResend, label = "Resend Code", waitLabel = "Resend code in" }: {
+  availableAt: number; sending: boolean; disabled: boolean; onResend: () => void; label?: string; waitLabel?: string;
+}) {
   const [now, setNow] = useState(() => Date.now());
   const left = cooldownSecondsLeft(availableAt, now);
 
@@ -343,13 +459,13 @@ function ResendButton({ availableAt, sending, disabled, onResend }: { availableA
   if (left > 0) {
     return (
       <p className="flex h-9 items-center font-semibold text-muted-foreground">
-        Resend code in <span className="ml-1 tabular-nums">{left}s</span>
+        {waitLabel} <span className="ml-1 tabular-nums">{left}s</span>
       </p>
     );
   }
   return (
     <Button type="button" variant="link" size="sm" onClick={onResend} disabled={sending || disabled}>
-      {sending ? "Sending…" : "Resend Code"}
+      {sending ? "Sending…" : label}
     </Button>
   );
 }

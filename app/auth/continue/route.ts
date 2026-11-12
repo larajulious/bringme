@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
   if (!userId) return to(area === "admin" ? "/admin/login?reason=expired" : "/auth/login?reason=expired");
 
   const { profile, failed } = await lookupOwnProfile(supabase, userId, "auth/continue");
-  if (failed) return to("/auth/error?error=profile_lookup_failed");
-  if (!profile) return to("/auth/error?error=profile_missing");
+  if (failed) return to("/auth/login?error=profile_lookup_failed");
+  if (!profile) return to("/auth/login?error=profile_missing");
 
   if (area === "admin") {
     if (profile.role !== "super_admin") {
