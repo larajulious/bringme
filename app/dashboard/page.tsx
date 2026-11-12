@@ -1,0 +1,93 @@
+import Link from "next/link";
+import { CheckCircle2, DoorOpen, Gamepad2, History, Plus } from "lucide-react";
+
+import { GameList } from "@/components/game/game-list";
+import { MetricCard } from "@/components/admin/metric-card";
+import { PageHeading } from "@/components/layout/dashboard-shell";
+import { PassStatus, passStatusCovers } from "@/components/subscription/pass-status";
+import { SubscriptionRestricted } from "@/components/subscription/restricted";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { getMyAccessStatus, getMyGamePass, requireSubscriberPage } from "@/lib/auth/session";
+import { getSupportEmail } from "@/lib/platform/settings";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function DashboardPage() {
+  const { profile, userId } = await requireSubscriberPage();
+  const [access, pass] = await Promise.all([getMyAccessStatus(), getMyGamePass()]);
+  const supabase = await createClient();
+
+  // RLS limits every query to the signed-in host's own games.
+  const [recent, total, completed] = await Promise.all([
+    supabase.from("games").select("id, title, status, join_code, created_at, archived_at, game_type").eq("owner_id", userId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("games").select("id", { count: "exact", head: true }).eq("owner_id", userId),
+    supabase.from("games").select("id", { count: "exact", head: true }).eq("owner_id", userId).eq("status", "finished"),
+  ]);
+  if (recent.error) throw new Error("Could not load games");
+
+  const games = recent.data ?? [];
+  const active = games.filter((g) => g.status === "draft" || g.status === "lobby" || g.status === "live");
+  const closed = games.filter((g) => g.status === "finished" || g.status === "canceled");
+  const history = closed.filter((g) => !g.archived_at).slice(0, 10);
+  const archived = closed.filter((g) => g.archived_at).slice(0, 20);
+  const canHost = access.state === "active";
+
+  return (
+    <>
+      <PageHeading
+        title={`Welcome${profile.display_name ? `, ${profile.display_name}` : ""}!`}
+        description="Ready to throw a party? Create a game and let your friends scan in."
+      />
+
+      <div className="mb-8 flex flex-wrap items-center gap-4">
+        {canHost ? (
+          <Button asChild size="lg">
+            <Link href="/dashboard/games/new"><Plus aria-hidden="true" /> Create game</Link>
+          </Button>
+        ) : null}
+        <Button asChild variant="ghost" size="sm"><Link href="/dashboard/subscription">Game Pass details</Link></Button>
+      </div>
+
+      {passStatusCovers(pass) ? <div className="mb-8"><PassStatus summary={pass} /></div> : null}
+
+      {!canHost && !passStatusCovers(pass) ? (
+        <SubscriptionRestricted state={access.state as Exclude<typeof access.state, "active">} supportEmail={await getSupportEmail()} trialEnded={pass?.trialEndedNoPass ?? false} />
+      ) : null}
+
+      <div className="mb-10 grid gap-4 sm:grid-cols-3">
+        <MetricCard label="Games created" value={total.count ?? 0} icon={<Gamepad2 />} />
+        <MetricCard label="Open now" value={active.length} accent="coral" icon={<DoorOpen />} hint="Lobby or live" />
+        <MetricCard label="Completed" value={completed.count ?? 0} accent="success" icon={<CheckCircle2 />} />
+      </div>
+
+      <section aria-labelledby="active-h" className="mb-10">
+        <h2 id="active-h" className="mb-4 text-xl font-bold text-primary">Active games</h2>
+        {active.length === 0 ? (
+          <EmptyState
+            icon={<DoorOpen />}
+            title="No games open right now"
+            description={canHost ? "Create a game to open a lobby and get a QR code for your players." : "Games you open will show up here."}
+            action={canHost ? <Button asChild><Link href="/dashboard/games/new">Create game</Link></Button> : undefined}
+          />
+        ) : (
+          <GameList games={active} label="Active games" />
+        )}
+      </section>
+
+      <section aria-labelledby="history-h">
+        <h2 id="history-h" className="mb-4 text-xl font-bold text-primary">Game history</h2>
+        {history.length === 0 ? (
+          <EmptyState icon={<History />} title="No past games yet" description="Finished and cancelled games will be listed here." />
+        ) : (
+          <GameList games={history} label="Game history" />
+        )}
+        {archived.length ? (
+          <details className="mt-6 rounded-3xl border bg-card p-4">
+            <summary className="cursor-pointer font-display text-lg font-semibold text-primary">Archived games ({archived.length})</summary>
+            <div className="mt-3"><GameList games={archived} label="Archived games" /></div>
+          </details>
+        ) : null}
+      </section>
+    </>
+  );
+}

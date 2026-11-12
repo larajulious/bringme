@@ -1,0 +1,105 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { CircleCheck, MonitorPlay } from "lucide-react";
+
+import { FinishedResults } from "@/components/game/finished-results";
+import { HostConsole } from "@/components/game/host-console";
+import { LobbyView } from "@/components/game/lobby-view";
+import { QrCode } from "@/components/game/qr-code";
+import { PageHeading } from "@/components/layout/dashboard-shell";
+import { formatDate } from "@/components/subscription/access-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { isUuid } from "@/lib/api/http";
+import { requireSubscriberPage } from "@/lib/auth/session";
+import type { HostSnapshot } from "@/lib/game/types";
+import { getSiteUrl, joinUrl } from "@/lib/site/url";
+import { createClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = { title: "Game", robots: { index: false } };
+
+export default async function GamePage({ params }: { params: Promise<{ id: string }> }) {
+  await requireSubscriberPage();
+  const { id } = await params;
+  if (!isUuid(id)) notFound();
+
+  const supabase = await createClient();
+  // RLS + an owner check inside host_game_state(): another host's id is just "not found".
+  const [{ data: game }, snapshot, players, rounds] = await Promise.all([
+    supabase.from("games").select("id, title, status, join_code, max_players, created_at, game_type").eq("id", id).maybeSingle(),
+    supabase.rpc("host_game_state", { p_game: id }),
+    supabase.from("players").select("id, nickname").eq("game_id", id).is("kicked_at", null).order("joined_at", { ascending: true }),
+    supabase.from("game_rounds").select("round_no, prompt").eq("game_id", id).order("round_no", { ascending: true }),
+  ]);
+  if (game?.game_type === "bingosnap") redirect(`/dashboard/extra-fun/bingosnap/${game.id}`);
+  if (!game || snapshot.error || !snapshot.data) notFound();
+  if (players.error) throw new Error("Could not load players");
+  const state = { ...(snapshot.data as unknown as HostSnapshot), joinCode: game.join_code };
+  const roster = players.data ?? [];
+
+  const presentable = game.status === "lobby" || game.status === "live" || game.status === "finished";
+  const back = (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <Link href="/dashboard" className="text-sm font-semibold text-primary underline-offset-4 hover:underline">← Dashboard</Link>
+      {presentable ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="hidden text-sm text-muted-foreground sm:inline">Projecting? Players only see what they should.</span>
+          <Button asChild size="sm">
+            <Link href={`/present/${game.id}`} target="_blank" rel="noopener">
+              <MonitorPlay aria-hidden="true" /> Open presenter screen<span className="sr-only"> (opens in a new window)</span>
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (game.status === "lobby") {
+    const site = getSiteUrl();
+    const url = joinUrl(site.url, game.join_code);
+    return (
+      <>
+        {back}
+        <LobbyView
+          gameId={game.id} title={game.title} code={game.join_code} joinUrl={url}
+          maxPlayers={game.max_players} roundCount={state.totalRounds} items={(rounds.data ?? []).map((r) => r.prompt)} players={roster}
+          siteUrlConfigured={site.configured} initialState={state}
+          qr={<QrCode value={url} label={`QR code to join ${game.title}. Room code ${game.join_code}`} className="h-auto w-full" />}
+        />
+      </>
+    );
+  }
+
+  if (game.status === "live") {
+    return (
+      <>
+        {back}
+        <PageHeading title="Game on" description="You control every step. Players follow along on their phones." />
+        <HostConsole gameId={game.id} initial={state} initialPlayers={roster} />
+      </>
+    );
+  }
+
+  if (game.status === "finished" || game.status === "canceled") {
+    return (
+      <>
+        {back}
+        <PageHeading title={game.title} description={`Room code ${game.join_code} · created ${formatDate(game.created_at)}`} />
+        <FinishedResults gameId={game.id} initial={state} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {back}
+      <PageHeading title={game.title} description={`Room code ${game.join_code} · created ${formatDate(game.created_at)}`} />
+      <EmptyState icon={<CircleCheck />}
+        title="This game hasn't opened yet"
+        description={`${state.totalRounds} ${state.totalRounds === 1 ? "round" : "rounds"} · ${roster.length} ${roster.length === 1 ? "player" : "players"}`}
+        action={<Badge variant="secondary">{game.status}</Badge>} />
+    </>
+  );
+}
