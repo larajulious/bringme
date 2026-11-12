@@ -137,6 +137,11 @@ function Hunt({ s, left, over }: { s: BingoHostSnapshot; left: number; over: boo
   const b = s.board;
   const cells = s.cells ?? [];
   const verified = s.submissions.filter((x) => x.status === "verified").sort((a, c) => (a.rank ?? 99) - (c.rank ?? 99));
+  // Who should come forward to the Game Master, in the order the claims were received.
+  // (First Bingo wins + a verified winner: nobody else needs to come forward.)
+  const line = b.winnerRule === "first" && verified.length ? []
+    : s.submissions.filter((x) => x.status === "pending").sort((a, c) => Date.parse(a.submittedAt) - Date.parse(c.submittedAt));
+  const CALL = 6;
   const dense = b.size >= 5;
   return (
     <div className="relative isolate grid h-full grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-x-[3vw] px-[3vw] py-[3dvh] portrait:grid-cols-1 portrait:grid-rows-[auto_1fr_auto] portrait:gap-y-[2dvh]">
@@ -171,9 +176,23 @@ function Hunt({ s, left, over }: { s: BingoHostSnapshot; left: number; over: boo
           <p className="font-display text-[clamp(1.125rem,3dvh,1.75rem)] font-semibold">
             {s.submissions.length ? <><span className="text-brand-yellow">{s.submissions.length}</span> {s.submissions.length === 1 ? "Bingo claim" : "Bingo claims"} in</> : "Be the first to shout BINGO!"}
           </p>
+          {line.length ? (
+            <div className="mt-[1.5dvh] grid gap-[1dvh] text-left">
+              <p className="text-center text-[clamp(0.875rem,2.2dvh,1.25rem)] font-bold uppercase tracking-widest text-brand-yellow">Come forward with your phone</p>
+              <ol className="grid gap-[0.8dvh]" aria-label="Claims waiting to be checked, in order">
+                {line.slice(0, CALL).map((x, i) => (
+                  <li key={x.id} className={cn("flex animate-pop-in items-center gap-3 rounded-2xl px-4 py-[0.8dvh] motion-reduce:animate-none", i === 0 ? "bg-brand-yellow text-brand-night" : "bg-white/10")}>
+                    <span className={cn("grid size-[3dvh] min-w-7 place-items-center rounded-full font-display text-[clamp(0.875rem,2dvh,1.125rem)] font-bold", i === 0 ? "bg-brand-night text-brand-yellow" : "bg-white/20")}>{i + 1}</span>
+                    <span className="truncate font-display text-[clamp(1rem,2.6dvh,1.5rem)] font-semibold">{x.nickname}</span>
+                  </li>
+                ))}
+              </ol>
+              {line.length > CALL ? <p className="text-center text-[clamp(0.875rem,2.2dvh,1.25rem)] text-white/80">+{line.length - CALL} more in line</p> : null}
+            </div>
+          ) : null}
           {verified.length ? (
             <ol className="mt-[1.5dvh] grid gap-[1dvh]" aria-label="Verified Bingos">
-              {verified.slice(0, 5).map((v) => (
+              {verified.slice(0, line.length ? 3 : 5).map((v) => (
                 <li key={v.id} className="flex animate-pop-in items-center gap-3 rounded-2xl bg-white/15 px-4 py-[1dvh] text-left motion-reduce:animate-none">
                   <span className="grid size-[3.5dvh] min-w-8 place-items-center rounded-full bg-brand-yellow font-display font-bold text-brand-night">{v.rank ?? "•"}</span>
                   <span className="truncate font-display text-[clamp(1.125rem,3dvh,1.75rem)] font-semibold">{v.nickname}</span>

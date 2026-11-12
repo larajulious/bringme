@@ -14,13 +14,55 @@ Real-time party game with three roles: **Super Admin** (platform owner), **Subsc
 - **Motion**: CSS-only page transition via `app/template.tsx` (`.page-enter`); global `prefers-reduced-motion` override.
 - **Routes**: `/` landing, `/play` (public player placeholder), `/auth/{login,error}` (login = unified passwordless email-code page; old sign-up/forgot/update-password URLs redirect to it) + route handlers `/auth/confirm` (email links) and `/auth/continue` (server-side role router), `/dashboard`, `/dashboard/games/new`, `/dashboard/games/[id]` (lobby), `/dashboard/subscription` (Game Master), `/play` (public room-code entry), `/join/[code]` (QR landing + name form), `/join/[code]/lobby` (player waiting lobby), `/play/[code]` (redirects to `/join/[code]`), `/admin/login` (public) and the Super Admin console: `/admin/dashboard`, `/admin/subscribers`, `/admin/subscribers/[id]`, `/admin/plans`, `/admin/settings` (`/admin` redirects). `loading.tsx`/`error.tsx` at root and per area; `not-found.tsx`.
 
+## BingoSnap: camera, review, confirmations (2026-11-12)
+- **Camera stuck on a black "Starting the preview…"** (`components/bingosnap/photo-capture.tsx`). Two races, both cleared only by closing and reopening:
+  - (1) overlapping starts: the open effect, a visibility change (some permission prompts fire one) or a quick reopen could start the camera twice. The late start then killed or held the newer stream.
+  - (2) the `<video>` was re-attached only when `cam` *changed*, so a new stream arriving while `cam` was already "live" never reached it.
+  - **Fix:**
+    - a start generation (`genRef`): a start that resolves after a newer start or a stop stops its own tracks;
+    - `streamKey` re-attaches every new stream, also on `loadedmetadata` / `resize`;
+    - no second start while one is in flight, and a paused-but-live preview resumes on return (iOS);
+    - automatic restart (≤ 2) when a live stream shows no frames for 2.5 s;
+    - a **Restart camera** button next to "Use the camera app".
+  - The Bring Me camera (`camera-context.tsx`) already has an `opening` lock and keys the preview on the stream, so it is unchanged.
+- **Reviewing claims** (`components/bingosnap/host-dashboard.tsx`):
+  - the "Call forward" card turns the claim's squares into a tick-off checklist (`aria-pressed`, local only), with "n of m seen". Verify reads "All seen: Verify <name>" once everything is ticked;
+  - Reject pre-fills "Photo(s) missing: …" from the unticked squares (editable);
+  - "Also waiting" entries get **Review now** (brings that claim into the Call forward card and scrolls to it) instead of inline Verify / Reject;
+  - Verify / Reject stack full width on phones.
+- **Many claims to verify:**
+  - presenter: a "Come forward with your phone" call list (next 6 pending names in received order, "+n more"; hidden once a First-wins winner is verified);
+  - host: "Find a player…" search over the waiting list (from 6);
+  - host: **Not here? Skip for now** (moves the claim to the back of the host's local order, still pending, with a "skipped" badge);
+  - host: a First-Bingo-wins banner ("the n other claims can't change the winner") with End game & show winner;
+  - host: laptop keys V / R / S, and compact waiting rows (squares only on the claim being checked).
+  - **Check modal:** checking claims now happens in a modal ("Call forward: <name>": checklist, Verify / Reject / Skip, "Next in line", keys). It moves on to the next claim after each decision and ends with "Everyone in line has been checked". The page keeps a compact "Next to check · n waiting" card with **Check claims**, and "Review now" opens the modal on that claim. Reject stacks on top of it. Keys work only while the modal is open.
+  - **Claim lists modal:** "Also waiting", "Verified players" and "Verification history" moved off the page into one "Bingo claims" modal. It has Waiting / Verified / History tabs, a sticky "Find a player…" search (from 6 claims) across all tabs, Review now (closes the list and opens the check modal), and Undo. It opens from the Pending / Verified / Rejected count tiles (now buttons) and from "See everyone in line" on the Next-to-check card.
+  - `npm test`: the intermittent single failure (also seen in Phase 4) appeared once more and passed on the next 2 runs; the failing test name still wasn't captured.
+  - **Announce winners** (it was missing from the host UI; the server action `announce_results` already existed). After time's up or End hunt, an "Announce the winners" card shows the first-wins winner or the ranked count. It is blocked, with a **Check <name> now** button, while a claim received before the leader is unchecked (the server's `earlier_claim_pending` rule). A confirmation says how many later waiting claims won't be checked. It sends the leader's submission id as the confirmation and retries once on `stale_state` (e.g. the hunt just settled). The check modal's "Everyone in line has been checked" state also offers it. After announcing, the card shows "Winners are on the presenter screen" with **Finish game**.
+  - Client only. Not built: the player's own "you're #n in line" on their phone (needs a change to the player snapshot function).
+- **Confirmations:** Bring Me "Stop the hunt now" now opens "Stop the hunt now?" (shows the time left) instead of the 5 s undo window, and "Finish game & show results" opens "Finish the game?". BingoSnap's "End hunt now" and "End game" already confirmed.
+- tsc ✅, lint ✅, build ✅, `npm test` 611/611. **Not checked in a browser or on real phones.**
+
+## BingoSnap card editor: square editor in a modal (2026-11-12)
+- **Why:** on phones the square editor sat below the grid, so hosts scrolled back and forth between the square and what they were typing.
+- **Now** (`components/bingosnap/board-editor.tsx`): tapping a square (or Enter / typing on it) opens a **modal over the card**, top-aligned on phones so the keyboard doesn't cover it. It contains:
+  - a live preview tile that shows the square as it is typed;
+  - a clickable mini map of the card (current, done, empty, problem and free squares) to jump between squares;
+  - the instruction field (focused straight away, `enterKeyHint="next"`), counter, Clear and ideas;
+  - Previous / Next / Done.
+- **Unchanged:** Enter / Shift+Enter move to the next / previous square, Esc or Done closes and focuses the square, pasting a list still fills the following squares, and Ctrl/Cmd+S still saves. Publish validation opens the modal on the first problem square.
+- **Under the card:** "Fill in squares (n left)" opens the first empty square, plus "Fill empty with ideas". The inline editor panel and its scroll-into-view are gone.
+- **Shared `Modal`:** it now opens in `useLayoutEffect`, so a field inside can be focused in the same event (keeps the Phase 4 "no lost keystrokes" behaviour).
+- tsc ✅, lint ✅, build ✅. **Not checked in a browser**, including the fast-typing case.
+
 ## Bring Me host console: fewer presses (2026-11-12)
 - **Flow:** Start game also starts round 1. A single **Start round** runs the 3-2-1 and the reveal together (the server already sets `opened_at = greatest(now, countdown_ends_at)`). Photos **stop by themselves** at the time limit + 5 s upload grace and the review opens, with "Stop the hunt now" for an early stop. **Start round N+1** goes from the winner straight into the next 3-2-1. Each round now takes Start → Announce winner (with its confirmation) → Start next round, down from 7 presses.
 - **Layout** (`components/game/host-console.tsx`): one card with Hunt / Review / Winner progress, the item, the timer, one sentence and one big button, plus a "Presenter screen: …" line. Players and Add round fold away. "Replay 3-2-1" is gone: the round is already started during the countdown.
 - **Shared code:** `runSteps` in `host-api.ts` chains actions, each against the state the previous one returned. During a started-but-not-yet-open round the presenter shows the big 3-2-1 (it used to say "On your marks…").
 - **Upcoming item:** before every round (the lobby, between rounds, and the winner screen) the host sees the item that round will reveal, labelled "only you can see it". The round list is loaded on the server, so it shows on the first paint.
 - **Submissions modal:** the Submissions list is no longer on the page. It is a modal ("Photos · round N": counts, fastest first, Approve / Disqualify / Undo, and an **Announce winner…** footer during review). It opens by itself once per round when photos stop and there are photos; "See photos (n · k to review)" in the main card reopens it, also while photos are coming in. Tapping a photo opens the large viewer on top, which moves on to the next waiting photo after each decision and returns to the list after the last one. `ReviewPanel` gained `plain` for this; the card version is unchanged.
-- **Undo an early stop:** "Stop the hunt now" starts a 5 s "Ending the hunt in N…" window with **Undo, keep hunting**. Nothing is sent until the window ends, so players are never interrupted. We deliberately don't reopen a closed round on the server: the `game_rounds` trigger forbids closed → open, and the timing and winner rules depend on that. The automatic stop at the time limit has no undo window.
+- **Undo an early stop:** _(superseded: "Stop the hunt now" now asks for confirmation instead, see the BingoSnap section above)_. Originally a 5 s "Ending the hunt in N…" window with **Undo, keep hunting**. We deliberately don't reopen a closed round on the server: the `game_rounds` trigger forbids closed → open, and the timing and winner rules depend on that. The automatic stop at the time limit has no undo window.
 - **Button always visible:** the step button is pinned to the bottom of the scroll area (it was below the fold on phones). It is always shown: during the 3-2-1 it is a disabled "Starting…". "Stop the hunt now" is solid coral instead of a faint outline.
 - **Hide / show items** (`components/game/item-privacy.tsx`): an eye button (with `aria-pressed`) masks the item on the host's own screen. It covers the console's current / next item, the lobby's round 1 item and the "What players will bring" list. All toggles stay in sync, and the choice is remembered on that device (localStorage in try/catch; shown by default). The presenter and players are unaffected.
 - **Phones (360–390 px):**

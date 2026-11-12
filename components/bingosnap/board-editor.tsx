@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import {
   DURATION_PRESETS_MIN, EDITOR_ERRORS, MAX_DURATION_MIN, MIN_DURATION_MIN, boardProblems, centreIndex, clampMinutes,
@@ -105,10 +105,11 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
   const [busy, setBusy] = useState<null | "save" | "publish" | "discard">(null);
   const [error, setError] = useState<{ text: string; validation: boolean } | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  /** The square editor is a modal over the card, so what you type and the square stay together. */
+  const [editing, setEditing] = useState(false);
 
   const cellRefs = useRef<(HTMLDivElement | null)[]>([]);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const free = effectiveFree(d.wantFree, d.size, d.winMode);
   const shape = useMemo(() => ({ size: d.size, free }), [d.size, free]);
@@ -134,10 +135,12 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
   // Squares are always rendered, so focus moves immediately (rapid arrow presses are never lost).
   const focusCell = (pos: number) => { setSelected(pos); cellRefs.current[pos]?.focus(); };
   const editCell = (pos: number, opts: { replaceWith?: string } = {}) => {
-    // Render the editor for this square synchronously and focus it in the same event, so
-    // fast typing never lands on the grid while the editor is still appearing.
+    // Open the editor modal for this square synchronously (Modal opens in a layout effect) and focus it
+    // in the same event, so fast typing never lands on the grid while the editor is still appearing.
     flushSync(() => {
+      setView("edit");
       setSelected(pos);
+      setEditing(true);
       if (pos !== centre && opts.replaceWith !== undefined) setCell(pos, opts.replaceWith);
     });
     if (pos === centre) return;
@@ -145,11 +148,11 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
     if (!el) return;
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
-    // On phones the editor sits below the grid: keep it in view.
-    if (window.matchMedia("(max-width: 1279px)").matches) {
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      panelRef.current?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
-    }
+  };
+  /** Close the editor and put keyboard focus back on the square, now that the card is interactive again. */
+  const closeEditor = () => {
+    flushSync(() => setEditing(false));
+    cellRefs.current[sel]?.focus({ preventScroll: true });
   };
 
   // ---- board shape changes (warn before removing instructions)
@@ -197,10 +200,10 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
       e.preventDefault();
       const next = stepEditable(sel, shape, e.shiftKey ? -1 : 1);
       if (next !== null) editCell(next);
-      else if (!e.shiftKey) { focusCell(sel); toast(ready === total ? "Board complete!" : `${total - ready} square${total - ready === 1 ? "" : "s"} still empty.`, ready === total ? "success" : "info"); }
+      else if (!e.shiftKey) { closeEditor(); toast(ready === total ? "Board complete!" : `${total - ready} square${total - ready === 1 ? "" : "s"} still empty.`, ready === total ? "success" : "info"); }
     } else if (e.key === "Escape") {
       e.preventDefault();
-      focusCell(sel);
+      closeEditor();
     }
   };
   const onEditorPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -413,80 +416,16 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
                 ))}
               </div>
 
-              {/* -------------------------------------------- square editor */}
-              <div ref={panelRef} className="scroll-mb-24 rounded-3xl border-2 border-primary/15 bg-background p-4 sm:p-5">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-display text-lg font-bold text-primary">
-                    Square {shortLabel(sel, d.size)} <span className="text-sm font-semibold text-muted-foreground">· {longLabel(sel, d.size)}</span>
-                  </p>
-                  {selIsFree ? <Badge variant="yellow">Free space</Badge> : normalise(d.cells[sel] ?? "") ? <Badge variant="success"><Check aria-hidden="true" className="size-3" /> Ready</Badge> : <Badge variant="secondary">Empty</Badge>}
-                </div>
-                {selIsFree ? (
-                  <p className="text-muted-foreground">
-                    <Star aria-hidden="true" className="mr-1 inline size-4 fill-brand-yellow align-[-2px] text-brand-yellow-deep" />
-                    No photo needed: this square is complete for every player. Turn off the free centre in Board setup to use it as a challenge.
-                  </p>
-                ) : (
-                  <>
-                    <Label htmlFor="bs-edit" className="sr-only">Photo instruction for square {shortLabel(sel, d.size)}</Label>
-                    <textarea
-                      id="bs-edit"
-                      ref={editorRef}
-                      rows={2}
-                      value={d.cells[sel] ?? ""}
-                      maxLength={CHALLENGE_MAX_LENGTH}
-                      onChange={(e) => setCell(sel, e.target.value.replace(/\n/g, " "))}
-                      onKeyDown={onEditorKey}
-                      onPaste={onEditorPaste}
-                      placeholder={`e.g. ${suggestions([], 1, sel)[0] ?? "Take a photo of red shoes"}`}
-                      aria-describedby="bs-edit-count bs-edit-err"
-                      aria-invalid={showProblems && problems[sel] ? true : undefined}
-                      disabled={disabled}
-                      className="block min-h-[4.5rem] w-full resize-none rounded-2xl border-2 border-input bg-card px-4 py-3 text-base text-foreground transition-colors placeholder:text-muted-foreground/70 hover:border-primary/40 focus-visible:border-primary focus-visible:outline-none aria-[invalid=true]:border-destructive"
-                    />
-                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <p id="bs-edit-err" className="font-semibold text-destructive">{showProblems && problems[sel] ? problemCopy[problems[sel]!] : null}</p>
-                      <p id="bs-edit-count" className={cn("tabular-nums", (d.cells[sel] ?? "").length >= CHALLENGE_MAX_LENGTH - 20 ? "font-semibold text-brand-coral" : "text-muted-foreground")}
-                        aria-live={(d.cells[sel] ?? "").length >= CHALLENGE_MAX_LENGTH - 20 ? "polite" : "off"}>
-                        {(d.cells[sel] ?? "").length}/{CHALLENGE_MAX_LENGTH}
-                      </p>
-                    </div>
-                    {ideas.length ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Try:</span>
-                        {ideas.map((idea) => (
-                          <button key={idea} type="button" disabled={disabled} onClick={() => { setCell(sel, idea); editCell(sel); }}
-                            className="min-h-9 rounded-full bg-secondary px-3 text-left text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/40">
-                            {idea}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </>
-                )}
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="outline" size="sm" disabled={disabled || stepEditable(sel, shape, -1) === null} onClick={() => editCell(stepEditable(sel, shape, -1)!)}>
-                    <ChevronLeft aria-hidden="true" /> Previous
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" disabled={disabled || stepEditable(sel, shape, 1) === null} onClick={() => editCell(stepEditable(sel, shape, 1)!)}>
-                    Next <ChevronRight aria-hidden="true" />
-                  </Button>
-                  {!selIsFree ? (
-                    <Button type="button" variant="ghost" size="sm" disabled={disabled || !(d.cells[sel] ?? "")} onClick={() => { setCell(sel, ""); editCell(sel); }}>
-                      <Eraser aria-hidden="true" /> Clear
-                    </Button>
-                  ) : null}
-                  <span className="grow" />
-                  <Button type="button" variant="ghost" size="sm" disabled={disabled || ready === total}
-                    onClick={() => { setD({ ...d, cells: fillWithIdeas(d.cells, shape) }); toast("Filled the empty squares with ideas. Edit any of them.", "success"); }}>
-                    <Sparkles aria-hidden="true" /> Fill empty squares
-                  </Button>
-                </div>
-                <p className="mt-3 hidden text-xs text-muted-foreground sm:block">
-                  <kbd className="rounded bg-secondary px-1.5 py-0.5 font-sans">Enter</kbd> next square · <kbd className="rounded bg-secondary px-1.5 py-0.5 font-sans">Shift+Enter</kbd> previous ·{" "}
-                  <kbd className="rounded bg-secondary px-1.5 py-0.5 font-sans">Esc</kbd> back to the card · arrows move · type on a square to replace it · paste a list to fill several
-                </p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button type="button" disabled={disabled} onClick={() => editCell(nextEmpty(d.cells, shape) ?? (sel === centre ? (stepEditable(sel, shape, 1) ?? 0) : sel))}>
+                  <Pencil aria-hidden="true" /> {ready === 0 ? "Fill in squares" : ready === total ? "Edit squares" : `Fill in squares (${total - ready} left)`}
+                </Button>
+                <Button type="button" variant="ghost" disabled={disabled || ready === total}
+                  onClick={() => { setD({ ...d, cells: fillWithIdeas(d.cells, shape) }); toast("Filled the empty squares with ideas. Edit any of them.", "success"); }}>
+                  <Sparkles aria-hidden="true" /> Fill empty with ideas
+                </Button>
               </div>
+              <p className="text-center text-sm text-muted-foreground">Tap a square to write its photo instruction.</p>
             </>
           ) : (
             <PlayerPreview title={titleText} size={d.size} cells={d.cells} centre={centre} minutes={d.minutes} winMode={d.winMode} />
@@ -574,6 +513,112 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
           </Button>
         </div>
       ) : null}
+
+      {/* ------------------------------------------------ square editor (modal over the card) */}
+      <Modal
+        open={editing && view === "edit"} onClose={closeEditor}
+        className="max-w-lg max-sm:mb-auto max-sm:mt-3"
+        title={`Square ${shortLabel(sel, d.size)}`}
+        description={longLabel(sel, d.size)}
+        footer={
+          <>
+            <Button type="button" className="w-full sm:w-auto" onClick={closeEditor}>
+              <Check aria-hidden="true" /> Done
+            </Button>
+            <div className="grid grid-cols-2 gap-2 sm:mr-auto sm:flex">
+              <Button type="button" variant="outline" disabled={disabled || stepEditable(sel, shape, -1) === null} onClick={() => editCell(stepEditable(sel, shape, -1)!)}>
+                <ChevronLeft aria-hidden="true" /> Previous
+              </Button>
+              <Button type="button" variant="outline" disabled={disabled || stepEditable(sel, shape, 1) === null} onClick={() => editCell(stepEditable(sel, shape, 1)!)}>
+                Next <ChevronRight aria-hidden="true" />
+              </Button>
+            </div>
+          </>
+        }
+      >
+        <div className="grid gap-4">
+          {/* Where am I + how it will look: the square updates live as you type. */}
+          <div className="flex items-center gap-4">
+            <div aria-hidden="true"
+              className={cn("grid size-24 shrink-0 place-items-center overflow-hidden rounded-2xl p-1.5 text-center text-xs font-semibold leading-tight shadow-pop ring-4 ring-brand-yellow",
+                selIsFree ? "bg-brand-yellow text-brand-night" : normalise(d.cells[sel] ?? "") ? "bg-card text-foreground" : "border-2 border-dashed border-primary/30 bg-secondary text-muted-foreground")}>
+              {selIsFree ? <span className="flex flex-col items-center font-display font-bold uppercase"><Star className="size-5 fill-current" /> Free</span>
+                : <span className="line-clamp-5 break-words">{normalise(d.cells[sel] ?? "") || "Your instruction appears here"}</span>}
+            </div>
+            <div className="grid min-w-0 gap-2">
+              <div role="group" aria-label="Jump to a square" className="grid w-fit gap-1" style={{ gridTemplateColumns: `repeat(${d.size}, minmax(0, 1fr))` }}>
+                {Array.from({ length: d.size * d.size }, (_, pos) => {
+                  const filled = pos === centre || normalise(d.cells[pos] ?? "") !== "";
+                  const bad = showProblems && problems[pos];
+                  return (
+                    <button key={pos} type="button" disabled={disabled || pos === centre} onClick={() => editCell(pos)}
+                      aria-label={`Square ${shortLabel(pos, d.size)}${pos === centre ? ", free" : filled ? ", done" : ", empty"}`} aria-current={pos === sel ? "true" : undefined}
+                      className={cn("size-6 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-7",
+                        pos === sel ? "bg-brand-yellow ring-2 ring-primary" : pos === centre ? "bg-brand-yellow/50" : bad ? "bg-brand-coral" : filled ? "bg-primary" : "border-2 border-dashed border-primary/30 bg-card")} />
+                  );
+                })}
+              </div>
+              <p className="text-sm text-muted-foreground">{ready} of {total} ready</p>
+            </div>
+          </div>
+
+          {selIsFree ? (
+            <p className="text-muted-foreground">
+              <Star aria-hidden="true" className="mr-1 inline size-4 fill-brand-yellow align-[-2px] text-brand-yellow-deep" />
+              No photo needed: this square is complete for every player. Turn off the free centre in Board setup to use it as a challenge.
+            </p>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label htmlFor="bs-edit">Photo instruction</Label>
+              <textarea
+                id="bs-edit"
+                ref={editorRef}
+                rows={3}
+                value={d.cells[sel] ?? ""}
+                maxLength={CHALLENGE_MAX_LENGTH}
+                onChange={(e) => setCell(sel, e.target.value.replace(/\n/g, " "))}
+                onKeyDown={onEditorKey}
+                onPaste={onEditorPaste}
+                enterKeyHint="next"
+                placeholder={`e.g. ${suggestions([], 1, sel)[0] ?? "Take a photo of red shoes"}`}
+                aria-describedby="bs-edit-count bs-edit-err"
+                aria-invalid={showProblems && problems[sel] ? true : undefined}
+                disabled={disabled}
+                className="block min-h-[5.5rem] w-full resize-none rounded-2xl border-2 border-input bg-card px-4 py-3 text-base text-foreground transition-colors placeholder:text-muted-foreground/70 hover:border-primary/40 focus-visible:border-primary focus-visible:outline-none aria-[invalid=true]:border-destructive"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <p id="bs-edit-err" className="font-semibold text-destructive">{showProblems && problems[sel] ? problemCopy[problems[sel]!] : null}</p>
+                <div className="flex items-center gap-2">
+                  {(d.cells[sel] ?? "") ? (
+                    <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => { setCell(sel, ""); editCell(sel); }}>
+                      <Eraser aria-hidden="true" /> Clear
+                    </Button>
+                  ) : null}
+                  <p id="bs-edit-count" className={cn("tabular-nums", (d.cells[sel] ?? "").length >= CHALLENGE_MAX_LENGTH - 20 ? "font-semibold text-brand-coral" : "text-muted-foreground")}
+                    aria-live={(d.cells[sel] ?? "").length >= CHALLENGE_MAX_LENGTH - 20 ? "polite" : "off"}>
+                    {(d.cells[sel] ?? "").length}/{CHALLENGE_MAX_LENGTH}
+                  </p>
+                </div>
+              </div>
+              {ideas.length ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Try:</span>
+                  {ideas.map((idea) => (
+                    <button key={idea} type="button" disabled={disabled} onClick={() => { setCell(sel, idea); editCell(sel); }}
+                      className="min-h-11 rounded-full bg-secondary px-3 text-left text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/40">
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <p className="hidden text-xs text-muted-foreground sm:block">
+                <kbd className="rounded bg-secondary px-1.5 py-0.5 font-sans">Enter</kbd> next square · <kbd className="rounded bg-secondary px-1.5 py-0.5 font-sans">Shift+Enter</kbd> previous ·{" "}
+                <kbd className="rounded bg-secondary px-1.5 py-0.5 font-sans">Esc</kbd> back to the card · paste a list to fill several squares
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={pending !== null}

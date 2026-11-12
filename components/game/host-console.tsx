@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, ChevronDown, Flag, Hourglass, MonitorPlay, Play, Plus, RotateCcw, Square, Trophy, Undo2, Users } from "lucide-react";
+import { Camera, ChevronDown, Flag, Hourglass, MonitorPlay, Play, Plus, RotateCcw, Square, Trophy, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
@@ -31,8 +31,6 @@ const FOOT = cn(WRAP, "w-full sm:w-auto");
 const UPLOAD_GRACE_MS = 5000;
 const START_ROUND: HostAction[] = ["start_countdown", "start_round"];
 const STOP_AND_REVIEW: HostAction[] = ["close_submissions", "move_to_review"];
-/** A manual early stop waits this long (nothing is sent yet), so a mis-tap can be undone. */
-const STOP_UNDO_MS = 5000;
 
 const errorCopy: Record<string, string> = {
   stale_state: "The game just changed. Check the screen and try again.",
@@ -68,8 +66,9 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
   /** The Submissions list, as a modal. Opens by itself when photos stop. */
   const [showPhotos, setShowPhotos] = useState(false);
   const [confirmWinner, setConfirmWinner] = useState(false);
-  /** Early stop requested: the round id and when it will actually be sent (client clock). */
-  const [stopping, setStopping] = useState<{ roundId: string; at: number } | null>(null);
+  /** Confirmations for stopping the hunt early and for finishing the game. */
+  const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmFinish, setConfirmFinish] = useState(false);
   const [players, setPlayers] = useState(initialPlayers);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [rowsError, setRowsError] = useState(false);
@@ -195,15 +194,6 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `send` reads the latest state; re-arm on each state change
   }, [roundOpen, r?.id, openedAt, r?.timeLimitSeconds, offsetMs, busy, s.version]);
 
-  // Early stop with an undo window: send only when the window ends; drop it if the round moved on meanwhile.
-  useEffect(() => {
-    if (!stopping) return;
-    if (!roundOpen || r?.id !== stopping.roundId) { setStopping(null); return; }
-    const t = setTimeout(() => { setStopping(null); void send(STOP_AND_REVIEW); }, Math.max(0, stopping.at - Date.now()));
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `send` reads the latest state
-  }, [stopping, roundOpen, r?.id]);
-
   // Review flow: when photos stop, the Submissions modal opens (once per round).
   const reviewOpened = useRef<string | null>(null);
   const advanceFrom = useRef<string | null>(null);
@@ -236,7 +226,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
   // ONE step at a time: what is happening, what to do, and the single button that does it.
   type Step = { title: string; hint: string; button?: { label: string; run: () => void; icon: React.ReactNode; disabled?: boolean; pulse?: boolean; variant?: "default" | "camera" } };
   const startNext = (label: string, actions: HostAction[]): Step["button"] => ({ label, run: () => void send(actions), icon: <Play aria-hidden="true" className="!size-6" />, pulse: true });
-  const finish: Step["button"] = { label: "Finish game & show results", run: () => void send("end_game"), icon: <Flag aria-hidden="true" className="!size-6" /> };
+  const finish: Step["button"] = { label: "Finish game & show results", run: () => setConfirmFinish(true), icon: <Flag aria-hidden="true" className="!size-6" /> };
   let step: Step;
   if (s.phase === "lobby") {
     step = lastRound
@@ -246,14 +236,10 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
     // Only reached from an older screen or another tab: the 3-2-1 ran, the item isn't revealed yet.
     step = { title: "Countdown finished", hint: "Reveal the item to start the timer.", button: startNext("Reveal item & start", ["start_round"]) };
   } else if (s.phase === "active" && r && r.status === "open") {
-    const undoLeft = stopping ? Math.max(1, Math.ceil((stopping.at + offsetMs - now) / 1000)) : 0;
     step = !started
       ? { title: "Get ready…", hint: "The countdown is on everyone's screen. The item appears at GO!" }
-      : stopping
-      ? { title: `Ending the hunt in ${undoLeft}…`, hint: "Pressed by mistake? Undo and players keep hunting. Nothing has changed for them yet.",
-          button: { label: "Undo, keep hunting", run: () => setStopping(null), icon: <Undo2 aria-hidden="true" className="!size-6" /> } }
       : { title: "Players are hunting!", hint: "The hunt ends by itself when time runs out, or stop it now. Either way, you review the photos next.",
-          button: { label: "Stop the hunt now", run: () => setStopping({ roundId: r.id, at: Date.now() + STOP_UNDO_MS }), icon: <Square aria-hidden="true" className="!size-5" />, variant: "camera" } };
+          button: { label: "Stop the hunt now", run: () => setConfirmStop(true), icon: <Square aria-hidden="true" className="!size-5" />, variant: "camera" } };
   } else if (s.phase === "active" && r) {
     step = { title: "Time's up", hint: "Check the photos to pick a winner.", button: { label: "Review photos", run: () => void send("move_to_review"), icon: <Hourglass aria-hidden="true" className="!size-6" /> } };
   } else if (s.phase === "reviewing") {
@@ -470,6 +456,20 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
         title={`Replay round ${r?.no ?? ""}?`} confirmLabel="Replay round"
         description={`Everyone gets a new countdown and the full time to bring ${r?.prompt ? `“${r.prompt}”` : "the same item"}. Photos from the ended hunt are set aside, and it counts as no winner. It doesn't use up a round on your plan.`}
         onClose={() => setConfirmReplay(false)} onConfirm={() => void replay()}
+      />
+      <ConfirmDialog
+        open={confirmStop && roundOpen} busy={busy !== null} destructive={false}
+        title="Stop the hunt now?" confirmLabel="Stop the hunt"
+        description={`Players can't send photos after this${started && timeLeft > 0 ? ` (${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")} was still left)` : ""}. You'll review the photos next.`}
+        onClose={() => setConfirmStop(false)}
+        onConfirm={async () => { setConfirmStop(false); await send(STOP_AND_REVIEW); }}
+      />
+      <ConfirmDialog
+        open={confirmFinish} busy={busy !== null} destructive={false}
+        title="Finish the game?" confirmLabel="Finish & show results"
+        description="Everyone sees the final results and the champion. The game can't be played after this."
+        onClose={() => setConfirmFinish(false)}
+        onConfirm={async () => { await send("end_game"); setConfirmFinish(false); }}
       />
       <ConfirmDialog
         open={confirmEnd} busy={busy !== null} title="End the game now?" confirmLabel="End game"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -32,7 +32,9 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
-  useEffect(() => {
+  // Layout effect: the dialog is open as soon as the render that opened it commits, so a caller can
+  // focus a field inside it in the same event (e.g. after flushSync) without losing keystrokes.
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();

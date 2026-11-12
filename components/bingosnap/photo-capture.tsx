@@ -76,6 +76,11 @@ export function PhotoCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  /** Bumped by every start AND stop: a camera start that resolves after a newer start/stop is discarded. */
+  const genRef = useRef(0);
+  const startingRef = useRef(false);
+  /** Automatic restarts used for a preview that never shows frames (reset per opening / retake). */
+  const restarts = useRef(0);
   const lock = useRef(false);
   const titleId = useId();
   const statusId = useId();
@@ -83,6 +88,8 @@ export function PhotoCapture({
   const [mode, setMode] = useState<Mode>({ kind: existing ? "existing" : "camera" });
   const [cam, setCam] = useState<Cam>("starting");
   const [frames, setFrames] = useState(false);
+  /** Changes with every NEW live stream, so the <video> is re-attached even when `cam` stays "live". */
+  const [streamKey, setStreamKey] = useState(0);
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(0);
@@ -108,6 +115,7 @@ export function PhotoCapture({
     setMode({ kind: existing ? "existing" : "camera" });
     setError(null);
     lock.current = false;
+    restarts.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset per opening only
   }, [open]);
 
@@ -124,6 +132,8 @@ export function PhotoCapture({
 
   // ------------------------------------------------------------ camera ----
   const stopStream = useCallback(() => {
+    genRef.current++; // any start still waiting for the camera is now stale
+    startingRef.current = false;
     streamRef.current?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -132,33 +142,60 @@ export function PhotoCapture({
 
   const startStream = useCallback(async () => {
     stopStream();
+    const gen = genRef.current;
+    startingRef.current = true;
     setCam("starting");
     const r = await openCamera(navigator.mediaDevices, window.isSecureContext).catch((e) => ({ ok: false as const, reason: classifyCameraError(e) }));
+    if (gen !== genRef.current) {
+      // A newer start (or a close) happened meanwhile: never let this late stream hold the camera.
+      if (r.ok) r.stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    startingRef.current = false;
     if (!r.ok) return setCam(r.reason);
     streamRef.current = r.stream;
     for (const t of r.stream.getVideoTracks()) t.onended = () => setCam("interrupted");
     setCam("live");
+    setStreamKey((k) => k + 1);
   }, [stopStream]);
 
   const wantCamera = open && mode.kind === "camera" && !readOnly;
   useEffect(() => {
     if (!wantCamera) { stopStream(); return; }
-    let cancelled = false;
-    void startStream().then(() => { if (cancelled) stopStream(); });
-    return () => { cancelled = true; stopStream(); };
+    void startStream();
+    return () => stopStream();
   }, [wantCamera, startStream, stopStream]);
 
-  // Attach the stream once the <video> exists.
+  // Attach each new stream to the <video> (keyed on the stream, not just on "live").
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || cam !== "live" || !streamRef.current) return;
+    const stream = streamRef.current;
+    if (!v || cam !== "live" || !stream) return;
     const ready = () => setFrames(v.readyState >= 2 && v.videoWidth > 0);
+    const play = () => { void v.play().catch(() => undefined); };
+    v.addEventListener("loadedmetadata", play);
     v.addEventListener("loadeddata", ready);
     v.addEventListener("playing", ready);
-    v.srcObject = streamRef.current;
-    void v.play().catch(() => undefined);
-    return () => { v.removeEventListener("loadeddata", ready); v.removeEventListener("playing", ready); };
-  }, [cam, mode.kind]);
+    v.addEventListener("resize", ready);
+    if (v.srcObject !== stream) v.srcObject = stream;
+    play();
+    ready();
+    return () => {
+      v.removeEventListener("loadedmetadata", play);
+      v.removeEventListener("loadeddata", ready);
+      v.removeEventListener("playing", ready);
+      v.removeEventListener("resize", ready);
+    };
+  }, [cam, mode.kind, streamKey]);
+
+  // A live stream that shows no frames (stuck black preview): restart it by itself, like closing and
+  // reopening the camera would. Twice at most; after that the camera-app fallback and a Restart button stay.
+  useEffect(() => {
+    if (!wantCamera || cam !== "live" || frames) return;
+    if (restarts.current >= 2) return;
+    const t = setTimeout(() => { restarts.current++; void startStream(); }, 2500);
+    return () => clearTimeout(t);
+  }, [wantCamera, cam, frames, streamKey, startStream]);
 
   // A preview that never shows frames (some in-app browsers): offer the camera app after a few seconds.
   useEffect(() => {
@@ -172,9 +209,12 @@ export function PhotoCapture({
   useEffect(() => {
     if (!wantCamera) return;
     const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || startingRef.current) return; // a start is already on its way
       const alive = streamRef.current?.getVideoTracks().some((t) => t.readyState === "live");
-      if (!alive) void startStream();
+      if (!alive) { restarts.current = 0; void startStream(); return; }
+      // Still alive but paused while the page was hidden (iOS): resume the preview.
+      const v = videoRef.current;
+      if (v?.paused) void v.play().catch(() => undefined);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -221,7 +261,8 @@ export function PhotoCapture({
     }
   };
 
-  const retake = () => { setError(null); setMode({ kind: "camera" }); };
+  const retake = () => { setError(null); restarts.current = 0; setMode({ kind: "camera" }); };
+  const restartCamera = () => { restarts.current = 0; void startStream(); };
   const close = () => { if (!busy) onClose(); };
 
   // ------------------------------------------------------------- view ----
@@ -360,9 +401,14 @@ export function PhotoCapture({
                 {camHelp ? (
                   <Button variant="camera" size="lg" onClick={() => fileRef.current?.click()}><ImageUp aria-hidden="true" /> {fallbackLabel}</Button>
                 ) : slow ? (
-                  <button type="button" onClick={() => fileRef.current?.click()} className="text-sm font-semibold text-white/75 underline underline-offset-4 hover:text-white">
-                    {fallbackLabel}
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                    <button type="button" onClick={restartCamera} className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-white underline underline-offset-4 hover:text-brand-yellow">
+                      <RefreshCw aria-hidden="true" className="size-4" /> Restart camera
+                    </button>
+                    <button type="button" onClick={() => fileRef.current?.click()} className="min-h-11 text-sm font-semibold text-white/75 underline underline-offset-4 hover:text-white">
+                      {fallbackLabel}
+                    </button>
+                  </div>
                 ) : null}
               </div>
             )}
