@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { Suspense } from "react";
@@ -5,6 +6,8 @@ import { Suspense } from "react";
 import { AuthPage } from "@/components/auth/auth-page";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+
+export const metadata: Metadata = { title: "Sign-in problem", robots: { index: false, follow: false } };
 
 const messages: Record<string, string> = {
   link_invalid: "That link is invalid or has expired. Please request a new one.",

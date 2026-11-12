@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+
+import { pageMeta } from "@/lib/site/seo";
 import { Camera, CreditCard, Gamepad2, HeartHandshake, RotateCcw, Scale, ShieldAlert, Sparkles, UserRound, Wrench } from "lucide-react";
 
 import { LegalPage, type LegalSection } from "@/components/marketing/legal-page";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Terms & Conditions",
   description: "The simple rules for hosting and playing BringMe!, including how 7-Day Game Passes work.",
-};
+  path: "/terms",
+});
 
 const UPDATED = "11 November 2026";
 

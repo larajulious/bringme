@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Camera, Gamepad2 } from "lucide-react";
@@ -13,11 +14,36 @@ import { Pricing, PricingSection, PricingSkeleton } from "@/components/marketing
 import { SiteFooter } from "@/components/marketing/legal-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site/seo";
+import { getSiteUrl } from "@/lib/site/url";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
+/** Structured data for search engines: the site, who publishes it, and what the app is. */
+function StructuredData() {
+  const site = getSiteUrl().url;
+  const data = {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebSite", "@id": `${site}/#website`, url: `${site}/`, name: SITE_NAME, description: SITE_DESCRIPTION, inLanguage: "en", publisher: { "@id": `${site}/#org` } },
+      { "@type": "Organization", "@id": `${site}/#org`, name: SITE_NAME, url: `${site}/`, logo: `${site}/icon-512.png` },
+      {
+        "@type": "WebApplication", "@id": `${site}/#app`, name: SITE_NAME, url: `${site}/`, description: SITE_DESCRIPTION,
+        applicationCategory: "GameApplication", operatingSystem: "Any (web browser)",
+        browserRequirements: "A modern web browser. Players need a phone camera.",
+        image: `${site}/opengraph-image.png`, publisher: { "@id": `${site}/#org` },
+      },
+    ],
+  };
+  // "<" is escaped so the JSON can never close the script tag.
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }} />;
+}
 
 
 export default function Home() {
   return (
     <>
+      <StructuredData />
       <div className="paper-edge-bottom relative isolate flex min-h-svh flex-col overflow-hidden bg-gradient-to-b from-primary to-brand-night text-white">
         <Backdrop />
         <SiteHeader />

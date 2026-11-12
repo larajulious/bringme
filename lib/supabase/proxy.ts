@@ -52,6 +52,10 @@ export async function updateSession(request: NextRequest) {
     path === "/" ||
     path === "/terms" ||
     path === "/privacy" ||
+    // Crawler and browser files (search engines, social previews, "Add to Home Screen")
+    path === "/robots.txt" ||
+    path === "/sitemap.xml" ||
+    path === "/manifest.webmanifest" ||
     path.startsWith("/auth") ||
     path === "/admin/login" ||
     // Players join without an account

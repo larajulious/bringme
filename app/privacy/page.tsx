@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+
+import { pageMeta } from "@/lib/site/seo";
 import { Camera, Clock, Cookie, CreditCard, Database, Eye, Lock, Server, Sparkles, UserCheck, Users, Wrench } from "lucide-react";
 
 import { LegalPage, type LegalSection } from "@/components/marketing/legal-page";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: "Privacy Policy",
   description: "What BringMe! collects when you host or play, how it's used, and the choices you have.",
-};
+  path: "/privacy",
+});
 
 const UPDATED = "12 November 2026";
 

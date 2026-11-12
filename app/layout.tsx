@@ -3,20 +3,45 @@ import { Fredoka, Nunito } from "next/font/google";
 
 import { HydrationMark } from "@/components/layout/fit-viewport";
 import { ToastProvider } from "@/components/ui/toast";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE } from "@/lib/site/seo";
+import { getSiteUrl } from "@/lib/site/url";
 import "./globals.css";
 
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
+// Absolute URLs in social cards and canonical links come from the configured site URL
+// (NEXT_PUBLIC_SITE_URL), never a per-deployment preview host.
+const site = getSiteUrl().url;
 
 export const metadata: Metadata = {
-  metadataBase: new URL(defaultUrl),
+  metadataBase: new URL(site),
+  applicationName: SITE_NAME,
   title: {
-    default: "BringMe! — The real-time party game",
+    default: SITE_TITLE,
     template: "%s · BringMe!",
   },
-  description:
-    "Host a party game, share a QR code and let everyone join in seconds. No sign-up needed to play.",
+  description: SITE_DESCRIPTION,
+  keywords: [
+    "party game", "office party game", "team building game", "scavenger hunt game", "photo scavenger hunt",
+    "QR code game", "Christmas party game", "town hall icebreaker", "photo bingo",
+  ],
+  category: "games",
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  formatDetection: { telephone: false, email: false, address: false },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
+  // Facebook / LinkedIn / WhatsApp (Open Graph). The image is app/opengraph-image.png (1200×630).
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: "/",
+  },
+  // X / Twitter. The image is app/twitter-image.png.
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {
