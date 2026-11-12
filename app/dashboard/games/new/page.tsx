@@ -2,15 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { GameBuilder } from "@/components/game/game-builder";
+import { GameLimitNotice } from "@/components/game/game-limit-notice";
 import { PageHeading } from "@/components/layout/dashboard-shell";
 import { SubscriptionRestricted } from "@/components/subscription/restricted";
 import { getMyAccessStatus, getMyEntitlement, getMyGamePass, requireSubscriberPage } from "@/lib/auth/session";
 import { getSupportEmail } from "@/lib/platform/settings";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Create game" };
 
 export default async function NewGamePage() {
-  await requireSubscriberPage();
+  const { userId } = await requireSubscriberPage();
   const entitlement = await getMyEntitlement();
 
   if (!entitlement) {
@@ -23,6 +25,10 @@ export default async function NewGamePage() {
     );
   }
 
+  const { count } = await (await createClient()).from("games").select("id", { count: "exact", head: true }).eq("owner_id", userId).in("status", ["draft", "lobby", "live"]);
+  const open = count ?? 0;
+  const atLimit = open >= entitlement.max_active_games;
+
   return (
     <>
       <p className="mb-3 text-sm">
@@ -30,7 +36,7 @@ export default async function NewGamePage() {
       </p>
       <PageHeading title="Create a game" description="Pick your rounds, then open the lobby for your players." />
       <div className="max-w-3xl">
-        <GameBuilder maxRounds={entitlement.max_rounds_per_game} />
+        {atLimit ? <GameLimitNotice active={open} max={entitlement.max_active_games} /> : <GameBuilder maxRounds={entitlement.max_rounds_per_game} />}
       </div>
     </>
   );

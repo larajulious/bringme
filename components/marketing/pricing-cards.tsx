@@ -60,6 +60,7 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
               <p className="text-sm text-muted-foreground">No card needed</p>
               <ul className="my-6 grid gap-2.5 text-sm">
                 <Feature icon><strong>Up to {catalog.trial.maxPlayers} players</strong> per game</Feature>
+                <Feature><strong>Up to {catalog.trial.maxRounds} rounds</strong> per game</Feature>
                 <Feature>{catalog.trial.days} days of hosting</Feature>
                 <Feature>Starts automatically when you sign up</Feature>
               </ul>
@@ -73,7 +74,6 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
         {catalog.plans.map((p, i) => {
           const price = p.prices[currency];
           const hot = p.code === popular;
-          const perPlayer = price != null ? Math.max(1, Math.round(price / p.maxPlayers)) : null;
           return (
             <li key={p.code} className="reveal-item" style={{ "--i": i + 3 } as React.CSSProperties}>
               <article
@@ -94,10 +94,11 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
                   {price != null ? formatMoney(price, currency) : "—"}
                 </p>
                 <p className={cn("text-sm", hot ? "text-white/80" : "text-muted-foreground")}>
-                  per 7-day pass{perPlayer != null ? <> · about <strong className={hot ? "text-brand-yellow" : "text-foreground"}>{formatMoney(perPlayer, currency)}</strong> a player</> : null}
+                  per 7-day pass
                 </p>
                 <ul className="my-6 grid gap-2.5 text-sm">
                   <Feature icon hot={hot}><strong>Up to {p.maxPlayers} players</strong> per game</Feature>
+                  <Feature hot={hot}><strong>Up to {p.maxRounds} rounds</strong> per game</Feature>
                   {TERMS.map((t) => <Feature key={t} hot={hot}>{t}</Feature>)}
                 </ul>
                 {checkoutEnabled && price != null ? (

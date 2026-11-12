@@ -83,7 +83,7 @@ export default async function ExtraFunPage() {
       {past.length ? (
         <section aria-labelledby="bs-past-h">
           <h2 id="bs-past-h" className="mb-4 text-xl font-bold text-primary">Past BingoSnap games</h2>
-          <GameList games={past.slice(0, 20)} label="Past BingoSnap games" />
+          <GameList games={past} label="Past BingoSnap games" />
         </section>
       ) : null}
     </>

@@ -6,8 +6,8 @@ import { cacheLife } from "next/cache";
 import { parseCurrency, type CheckoutCurrency } from "@/lib/billing/currency";
 import type { Database } from "@/lib/supabase/database.types";
 
-export type PublicPlan = { code: string; name: string; maxPlayers: number; days: number; prices: Partial<Record<CheckoutCurrency, number>> };
-export type PublicCatalog = { trial: { maxPlayers: number; days: number } | null; plans: PublicPlan[] };
+export type PublicPlan = { code: string; name: string; maxPlayers: number; maxRounds: number; days: number; prices: Partial<Record<CheckoutCurrency, number>> };
+export type PublicCatalog = { trial: { maxPlayers: number; maxRounds: number; days: number } | null; plans: PublicPlan[] };
 
 /**
  * Active Game Pass catalogue for the public homepage (no login). Reads only what RLS already exposes to `anon`
@@ -25,7 +25,7 @@ export async function getPublicCatalog(): Promise<PublicCatalog> {
   const supabase = createClient<Database>(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
 
   const [plans, prices] = await Promise.all([
-    supabase.from("subscription_plans").select("id, code, name, max_players_per_game, duration_seconds, is_trial, tier, is_active")
+    supabase.from("subscription_plans").select("id, code, name, max_players_per_game, max_rounds_per_game, duration_seconds, is_trial, tier, is_active")
       .eq("is_active", true).not("tier", "is", null).order("tier"),
     supabase.from("plan_prices").select("plan_id, currency, amount_minor").eq("is_active", true),
   ]);
@@ -34,14 +34,14 @@ export async function getPublicCatalog(): Promise<PublicCatalog> {
   const days = (s: number) => Math.round(s / 86_400);
   const trialRow = (plans.data ?? []).find((p) => p.is_trial);
   return {
-    trial: trialRow ? { maxPlayers: trialRow.max_players_per_game, days: days(trialRow.duration_seconds) } : null,
+    trial: trialRow ? { maxPlayers: trialRow.max_players_per_game, maxRounds: trialRow.max_rounds_per_game, days: days(trialRow.duration_seconds) } : null,
     plans: (plans.data ?? []).filter((p) => !p.is_trial).map((p) => {
       const out: PublicPlan["prices"] = {};
       for (const x of prices.data ?? []) {
         const c = parseCurrency(x.currency);
         if (x.plan_id === p.id && c && x.amount_minor > 0) out[c] = x.amount_minor;
       }
-      return { code: p.code, name: p.name, maxPlayers: p.max_players_per_game, days: days(p.duration_seconds), prices: out };
+      return { code: p.code, name: p.name, maxPlayers: p.max_players_per_game, maxRounds: p.max_rounds_per_game, days: days(p.duration_seconds), prices: out };
     }).filter((p) => Object.keys(p.prices).length > 0),
   };
 }

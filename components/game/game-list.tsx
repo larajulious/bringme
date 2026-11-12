@@ -1,7 +1,12 @@
+"use client";
+
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Game } from "@/lib/supabase/database.types";
 
 export type GameListItem = Pick<Game, "id" | "title" | "status" | "join_code" | "created_at"> & Partial<Pick<Game, "game_type">>;
@@ -17,11 +22,18 @@ const statusBadge: Record<Game["status"], { label: string; variant: "yellow" | "
   canceled: { label: "Cancelled", variant: "secondary" },
 };
 
-/** Compact, link-per-row list of games. */
-export function GameList({ games, label }: { games: GameListItem[]; label: string }) {
+export const GAMES_PER_PAGE = 5;
+
+/** Compact, link-per-row list of games, paginated client-side beyond GAMES_PER_PAGE. */
+export function GameList({ games, label, pageSize = GAMES_PER_PAGE }: { games: GameListItem[]; label: string; pageSize?: number }) {
+  const [requested, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(games.length / pageSize));
+  const page = Math.min(requested, pages - 1); // the list can shrink (a game finishes) while a later page is open
+  const visible = games.slice(page * pageSize, (page + 1) * pageSize);
   return (
-    <ul aria-label={label} className="grid gap-3">
-      {games.map((g) => {
+    <div>
+      <ul aria-label={label} className="grid gap-3">
+      {visible.map((g) => {
         const b = statusBadge[g.status];
         return (
           <li key={g.id}>
@@ -43,6 +55,20 @@ export function GameList({ games, label }: { games: GameListItem[]; label: strin
           </li>
         );
       })}
-    </ul>
+      </ul>
+      {pages > 1 ? (
+        <nav aria-label={`${label} pages`} className="mt-4 flex items-center justify-between gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0}>
+            <ChevronLeft aria-hidden="true" /> Previous
+          </Button>
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            Page {page + 1} of {pages} · {games.length} games
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= pages - 1}>
+            Next <ChevronRight aria-hidden="true" />
+          </Button>
+        </nav>
+      ) : null}
+    </div>
   );
 }

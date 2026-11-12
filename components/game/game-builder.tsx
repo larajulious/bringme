@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Minus, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
+import { fillItemsWithIdeas, itemSuggestions } from "@/lib/host/ideas";
 import { ITEM_MAX_LENGTH, TITLE_MAX_LENGTH } from "@/lib/host/validation";
 
 type Item = { key: number; text: string };
@@ -17,7 +18,7 @@ const EXAMPLES = ["Something red", "A shoe", "Something that glows", "Your funni
 
 const errorCopy: Record<string, string> = {
   subscription_required: "Purchase required: your Game Pass isn't active (expired or not bought yet). Choose a 7-Day Game Pass to create games.",
-  game_limit_reached: "You've reached the number of games your plan allows at once. Finish or cancel one first.",
+  game_limit_reached: "You've reached the number of games your Game Pass allows at once (drafts, Bring Me and BingoSnap games count together). Finish, cancel or discard one first.",
   period_game_limit_reached: "You've used all the games included in your current Game Pass.",
   round_limit_reached: "That's more rounds than your plan allows.",
   too_many_items: "That's more rounds than your plan allows.",
@@ -54,6 +55,13 @@ export function GameBuilder({ maxRounds, defaultRounds = 5 }: { maxRounds: numbe
       [copy[index], copy[j]] = [copy[j], copy[index]];
       return copy;
     });
+  const texts = items.map((i) => i.text);
+  const fillEmpty = () => {
+    const filled = fillItemsWithIdeas(texts);
+    setItems((cur) => cur.map((i, n) => ({ ...i, text: filled[n] })));
+    setInvalid([]);
+    toast("Filled the empty rounds with ideas. Edit any of them.", "success");
+  };
   const remove = (key: number) => setItems((cur) => (cur.length > 1 ? cur.filter((i) => i.key !== key) : cur));
 
   const submit = async (e: React.FormEvent) => {
@@ -139,6 +147,17 @@ export function GameBuilder({ maxRounds, defaultRounds = 5 }: { maxRounds: numbe
                     aria-describedby={bad ? `item-err-${item.key}` : undefined}
                   />
                   {bad ? <p id={`item-err-${item.key}`} className="text-sm font-semibold text-destructive">Add an item for this round.</p> : null}
+                  {!item.text.trim() ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Try:</span>
+                      {itemSuggestions(texts, 3, index * 7).map((idea) => (
+                        <button key={idea} type="button" disabled={busy} onClick={() => update(item.key, idea)}
+                          className="min-h-9 rounded-full bg-secondary px-3 text-left text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/40">
+                          {idea}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button type="button" size="icon" variant="ghost" onClick={() => move(index, -1)} disabled={index === 0 || busy} aria-label={`Move round ${index + 1} up`}>
@@ -157,6 +176,9 @@ export function GameBuilder({ maxRounds, defaultRounds = 5 }: { maxRounds: numbe
         </ol>
         <Button type="button" variant="outline" className="mt-4" onClick={() => setCount(items.length + 1)} disabled={items.length >= maxRounds || busy}>
           <Plus aria-hidden="true" /> Add another round
+        </Button>
+        <Button type="button" variant="ghost" className="mt-4 ml-2" onClick={fillEmpty} disabled={busy || items.every((i) => i.text.trim())}>
+          <Sparkles aria-hidden="true" /> Fill empty rounds
         </Button>
       </section>
 

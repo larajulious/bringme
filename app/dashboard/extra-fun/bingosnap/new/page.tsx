@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BoardEditor } from "@/components/bingosnap/board-editor";
+import { GameLimitNotice } from "@/components/game/game-limit-notice";
 import { PageHeading } from "@/components/layout/dashboard-shell";
 import { SubscriptionRestricted } from "@/components/subscription/restricted";
 import { getMyAccessStatus, getMyEntitlement, getMyGamePass, requireSubscriberPage } from "@/lib/auth/session";
 import { getSupportEmail } from "@/lib/platform/settings";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "New BingoSnap game" };
 
@@ -16,7 +18,7 @@ const back = (
 );
 
 export default async function NewBingoSnapPage() {
-  await requireSubscriberPage();
+  const { userId } = await requireSubscriberPage();
   // The same Game Pass entitlement as Bring Me (database clock); the player cap comes from it.
   const entitlement = await getMyEntitlement();
 
@@ -31,11 +33,15 @@ export default async function NewBingoSnapPage() {
     );
   }
 
+  const { count } = await (await createClient()).from("games").select("id", { count: "exact", head: true }).eq("owner_id", userId).in("status", ["draft", "lobby", "live"]);
+  const open = count ?? 0;
+  const atLimit = open >= entitlement.max_active_games;
+
   return (
     <>
       {back}
       <PageHeading title="New BingoSnap game" description="Tap a square to write what players must photograph. Save a draft any time; publish when every square is ready." />
-      <BoardEditor maxPlayers={entitlement.max_players_per_game} />
+      {atLimit ? <GameLimitNotice active={open} max={entitlement.max_active_games} /> : <BoardEditor maxPlayers={entitlement.max_players_per_game} />}
     </>
   );
 }
