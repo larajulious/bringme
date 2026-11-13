@@ -2,17 +2,26 @@
 
 import { useRef } from "react";
 
+type AC = typeof AudioContext;
+
 /**
- * A short camera-shutter "click", synthesised with Web Audio (no audio files, no library). The AudioContext is
- * created on the first call, so call it only from (or after) a user gesture: browsers keep audio locked until then.
+ * A short camera-shutter "click", synthesised with Web Audio (no audio files, no library). Browsers keep audio locked
+ * until a user gesture, so call it from (or after) one.
+ *
+ * Creating the AudioContext is slow (~100–200 ms the first time: the audio device starts up). Where the click must be
+ * instant (e.g. mid-animation), call `click.warm()` ahead of time, off the critical path (idle), and again from a
+ * gesture (cheap once created: it only resumes, which is what unlocks audio on iOS).
  */
 export function useShutterSound() {
   const ctx = useRef<AudioContext | null>(null);
-  return () => {
+  const get = () => {
+    const C = window.AudioContext ?? (window as unknown as { webkitAudioContext?: AC }).webkitAudioContext;
+    return C ? (ctx.current ??= new C()) : null;
+  };
+  const click = () => {
     try {
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AC) return;
-      const ac = (ctx.current ??= new AC());
+      const ac = get();
+      if (!ac) return;
       if (ac.state === "suspended") void ac.resume();
       const t = ac.currentTime;
       // noise burst = the shutter
@@ -43,4 +52,10 @@ export function useShutterSound() {
       osc.stop(t + 0.13);
     } catch { /* audio unavailable: silent */ }
   };
+  return Object.assign(click, {
+    /** Creates (or resumes) the audio context without making a sound. */
+    warm: () => { try { const ac = get(); if (ac?.state === "suspended") void ac.resume(); } catch { /* silent */ } },
+    /** Whether the context exists yet (creating it is the slow part). */
+    created: () => ctx.current !== null,
+  });
 }

@@ -4,6 +4,7 @@ import { Check, Gamepad2, QrCode } from "lucide-react";
 import { Backdrop } from "@/components/brand/backdrop";
 import { PhoneScene, ProjectorScene } from "@/components/marketing/audience-scenes";
 import { Reveal } from "@/components/marketing/reveal";
+import { OffscreenPause } from "@/components/layout/offscreen-pause";
 import { StoryStage } from "@/components/marketing/story/stage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ export function Audience() {
   return (
     <section aria-labelledby="roles-heading" className="paper-section relative z-10 my-6 flex min-h-svh flex-col justify-center overflow-x-clip px-5 py-[clamp(3rem,8svh,6rem)]">
       <StoryStage name="audience" tone="paper" />
+      <OffscreenPause />
       <Reveal className="relative isolate z-[2] mx-auto grid w-full max-w-6xl gap-[clamp(1.5rem,5svh,3rem)]">
         <div className="text-center">
           <h2 id="roles-heading" className="reveal-item mb-3 text-3xl font-bold text-primary sm:text-4xl lg:text-5xl">Who is it for?</h2>

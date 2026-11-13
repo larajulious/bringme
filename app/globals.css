@@ -383,6 +383,18 @@ html[data-fit-viewport] body {
   }
 }
 
+/* Decorative loops pause while their section is off screen (components/layout/offscreen-pause.tsx). */
+[data-offscreen] *,
+[data-offscreen] *::before,
+[data-offscreen] *::after { animation-play-state: paused !important; }
+
+/* Lenis smooth wheel scrolling (homepage only, started by the snap story engine; see lenis/dist/lenis.css). */
+html.lenis,
+html.lenis body { height: auto; }
+.lenis:not(.lenis-autoToggle).lenis-stopped { overflow: clip; }
+.lenis [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-smooth iframe { pointer-events: none; }
+
 /* Snap story (components/marketing/snap-story), reduced motion: the three still steps fade in (opacity only, no
  * movement) once they scroll into view. Only hidden after JS has armed them, so they're never lost without it. */
 @media (prefers-reduced-motion: reduce) {

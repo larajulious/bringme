@@ -11,213 +11,47 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import type { StoryConfig } from "./engine";
 import { SNAP_ITEMS, type SnapItem } from "./items";
+import { PARTS, fmtTime, restStyle, type Part, type Styled } from "./scene";
 
 /* ================================================================================================
- * STORYBOARD: every timing in the section. Phases are [start, end] fractions of the pinned scroll
- * (0 = pin starts, 1 = pin ends). Each phase's sub-steps are placed as fractions *inside* it, so moving
- * or resizing a phase carries its contents along.
+ * STORYBOARD: every timing in the section.
+ * - Scroll only picks the TARGET stage (from `stageStart`); each stage then plays at its own `durations`.
+ * - The card → phone morph is the one scrubbed part (stageStart.morph → stageStart.viewfinder, `morph.scrub`).
+ * - When scrolling stops, the page glides to the next stage boundary in the scroll direction (`scrollSnap`).
+ * - Skipping stages with a fast scroll plays the skipped ones faster, up to `maxCatchUp`×; the snap always at 1×.
  * ============================================================================================== */
 export const STORYBOARD = {
   /** Scroll distance while pinned, in % of the viewport height (svh: steady while mobile toolbars slide). */
   pin: { mobile: 200, desktop: 250 },
   /** Desktop layout from this width up (Tailwind `md`). */
   desktopFrom: 768,
-  /** Scrub smoothing time constant (s): how quickly the scene catches up with the scrollbar. 0 = locked to it. */
-  scrub: 0.14,
-  phases: {
-    prompt: [0, 0.15], //     "Bring me… a red stapler!" card + Snappy
-    morph: [0.15, 0.35], //   card → phone; Snappy hops on and becomes the lens
-    viewfinder: [0.35, 0.55], // camera UI, 3-2-1, timer runs, the item drifts into frame
-    snap: [0.55, 0.65], //    focus brackets close in, shutter
-    locked: [0.65, 0.85], //  polaroid slides out, "Locked in!" springs
-    win: [0.85, 1], //        crown, confetti, CTA
-  },
-  /** When the shutter fires, as a fraction of the snap phase. */
-  shutterAt: 0.45,
-  /** The time frozen on screen when the shutter fires. */
+  /** Where each stage begins, as a fraction of the pinned scroll. */
+  stageStart: { prompt: 0, morph: 0.15, viewfinder: 0.35, snap: 0.55, lockedIn: 0.65, win: 0.85 },
+  /** Each stage's playback duration (s). `prompt` = the shout as the section comes in. The morph is scrubbed instead. */
+  durations: { prompt: 0.5, viewfinder: 2.4, snap: 0.9, lockedIn: 1.1, win: 1.3 },
+  /** Scrub smoothing for the morph (s to catch up with the scrollbar). */
+  morph: { scrub: 0.3 },
+  /** Settling on a stage boundary after scrolling stops. */
+  scrollSnap: { duration: { min: 0.25, max: 0.6 }, delay: 0.08, ease: "power2.out" },
+  /** Fastest catch-up when a scroll skips several stages (× normal speed). */
+  maxCatchUp: 2,
+  /** When the shutter fires (s into the snap stage), and the time frozen on screen. */
+  shutterAt: 0.4,
   winTime: 7.412,
-  /** The snap plays on the clock (ms), so it stays sharp at any scroll speed. */
+  /** The snap's flash, punch and shake (ms). */
   flashMs: 120,
   punchMs: 220,
   shakeMs: 380,
-} as const;
-
-/* ------------------------------------------- math ------------------------------------------- */
-
-type Win = readonly [number, number];
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-/** 0 → 1 as q crosses the window. */
-const prog = (q: number, w: Win) => clamp01((q - w[0]) / (w[1] - w[0]));
-/** The part of a phase from fraction a to b. */
-const sub = (w: Win, a: number, b: number): Win => [lerp(w[0], w[1], a), lerp(w[0], w[1], b)];
-/** 0 → 1 → 0. */
-const bump = (t: number) => Math.sin(Math.PI * clamp01(t));
-const ease = {
-  out: (t: number) => 1 - (1 - t) ** 3,
-  inOut: (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2),
-  /** overshoots, then settles (pops) */
-  back: (t: number, s = 1.9) => (t >= 1 ? 1 : 1 + (s + 1) * (t - 1) ** 3 + s * (t - 1) ** 2),
-  /** a damped spring: ~18% overshoot, one wobble */
-  spring: (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.exp(-6.5 * t) * Math.cos(12 * t)),
-};
-const r2 = (v: number) => Math.round(v * 100) / 100;
-const tf = (x: number, y: number, rot = 0, s = 1) =>
-  `translate(-50%,-50%) translate(${r2(x)}px,${r2(y)}px) rotate(${r2(rot)}deg) scale(${Math.round(s * 1000) / 1000})`;
-const SHUTTER = lerp(STORYBOARD.phases.snap[0], STORYBOARD.phases.snap[1], STORYBOARD.shutterAt);
-const CONFETTI_AT = lerp(STORYBOARD.phases.win[0], STORYBOARD.phases.win[1], 0.1);
-const fmtTime = (s: number) => `${s.toFixed(3).padStart(6, "0")}s`;
-
-/* ----------------------------------------- geometry ----------------------------------------- */
-// Design units (px inside the stage, which is scaled to fit its area). Origin = stage centre.
-const W = 440;
-const H = 600;
-const CARD = { w: 352, h: 216, r: 30 };
-const PHONE = { w: 250, h: 510, r: 46, bezel: 9 };
-const LENS_Y = -PHONE.h / 2 + 27;
-const ITEM_Y = 14;
-const LAYOUTS = {
-  desktop: { phoneX: -80, polaroid: { x: 120, y: 30, rot: 7, s: 1 } },
-  mobile: { phoneX: -60, polaroid: { x: 92, y: 64, rot: 7, s: 0.9 } },
-};
-type Layout = { mobile: boolean; /** room the mobile CTA needs at the bottom (design units) */ ctaRoom: number };
-
-/* ------------------------------------------ frame ------------------------------------------- */
-
-const PARTS = [
-  "group", "rig", "kick", "shout", "shell", "cardFace", "bezel", "screen", "camera", "scene", "item", "grid",
-  "lightUi", "bTL", "bTR", "bBL", "bBR", "shutter", "d3", "d2", "d1", "island", "prompt", "promptLight", "snappy",
-  "cheer", "polaroid", "locked", "crown", "cta", "flash", "roomFlash", "timer",
-] as const;
-type Part = (typeof PARTS)[number];
-type St = { t?: string; o?: number; w?: number; h?: number; r?: number };
-type Frame = Partial<Record<Part, St>> & { time: number; ctaIn: number };
-
-/** The whole scene at scroll progress q (0–1). Pure: the same q always draws the same frame. */
-function frame(q: number, L: Layout): Frame {
-  const P = STORYBOARD.phases;
-  const lay = L.mobile ? LAYOUTS.mobile : LAYOUTS.desktop;
-
-  // PROMPT: the shout (the card pumps, Snappy jumps)
-  const shout = bump(prog(q, P.prompt));
-
-  // MORPH: card → phone (the one layout animation: size + radius)
-  const m = ease.inOut(prog(q, sub(P.morph, 0, 0.85)));
-  const w = lerp(CARD.w, PHONE.w, m);
-  const h = lerp(CARD.h, PHONE.h, m);
-  const r = lerp(CARD.r, PHONE.r, m);
-  const toScreen = ease.inOut(prog(q, sub(P.morph, 0.1, 0.85)));
-  const cam = ease.out(prog(q, sub(P.viewfinder, 0, 0.22)));
-
-  // the phone as a whole: tilt settles, slides aside for the polaroid, then settles again
-  const slide = ease.inOut(prog(q, sub(P.locked, 0.05, 0.55)));
-  const settle = ease.out(prog(q, sub(P.win, 0.3, 0.9)));
-  const rigX = lay.phoneX * slide;
-  const rigRot = lerp(-3, 0, ease.out(prog(q, sub(P.morph, 0, 0.6)))) - 4 * slide + 2.5 * settle;
-
-  // Snappy hops onto the phone (with a flip) and becomes the lens; cheers at the win
-  const hop = prog(q, sub(P.morph, 0.3, 0.95));
-  const he = ease.inOut(hop);
-  const cheerPop = ease.spring(prog(q, sub(P.win, 0, 0.35)));
-
-  // VIEWFINDER: looking around, then the item drifts into frame; a handheld wobble until the shutter
-  const vf = P.viewfinder;
-  const pan = ease.out(prog(q, sub(vf, 0.3, 1)));
-  const itemIn = prog(q, sub(vf, 0.55, 1));
-  const sway = (1 - prog(q, [SHUTTER - 0.03, SHUTTER])) * cam;
-  const swX = Math.sin(q * 90) * 3 * sway;
-  const swY = Math.cos(q * 70) * 2 * sway;
-  const digit = (k: number): St => {
-    const t = prog(q, sub(vf, 0.16 + k * 0.13, 0.16 + (k + 1) * 0.13));
-    const inn = clamp01(t / 0.3);
-    const out = clamp01((t - 0.72) / 0.28);
-    return { t: tf(0, ITEM_Y, 0, lerp(1.9, 1, ease.back(inn, 2.2)) * lerp(1, 0.7, out)), o: r2(Math.min(inn * 3, 1) * (1 - out)) };
-  };
-  const timerStart = sub(vf, 0.55, 0.55)[0];
-
-  // SNAP: brackets close in on the item (springy), the shutter button presses
-  const lock = ease.back(prog(q, sub(P.snap, 0, 0.42)), 2.4);
-  const bx = lerp(98, 80, lock);
-  const by = lerp(196, 58, lock);
-  const press = 1 - 0.16 * bump(prog(q, [SHUTTER - 0.012, SHUTTER + 0.025]));
-
-  // LOCKED IN: the frame lifts out of the phone as a polaroid
-  const pe = prog(q, sub(P.locked, 0, 0.55));
-  const pm = ease.back(pe, 1.25);
-  const pol = lay.polaroid;
-  const px = lerp(0, pol.x, pm);
-  const py = lerp(ITEM_Y, pol.y, pm) - Math.sin(Math.PI * pe) * 46;
-  const prot = lerp(0, pol.rot, ease.out(pe));
-  const ps = lerp(0.74, pol.s, ease.out(pe));
-  const winPop = 1 + 0.05 * bump(prog(q, sub(P.win, 0, 0.3)));
-  // badges ride on the polaroid's corners
-  const corner = (dx: number, dy: number) => {
-    const a = (prot * Math.PI) / 180;
-    return [px + (dx * Math.cos(a) - dy * Math.sin(a)) * ps, py + (dx * Math.sin(a) + dy * Math.cos(a)) * ps] as const;
-  };
-  const lockT = prog(q, sub(P.locked, 0.5, 0.85));
-  const [lx, ly] = corner(58, 124);
-  const crownT = prog(q, sub(P.win, 0.02, 0.32));
-  const [cx, cy] = corner(-84, -126);
-
-  // WIN (phones): the scene shrinks up a little to make room for the CTA
-  const room = L.mobile ? L.ctaRoom * ease.inOut(prog(q, sub(P.win, 0.2, 0.7))) : 0;
-  const gk = (H - room) / H;
-
-  return {
-    group: { t: `translate(0px,${r2(-room / 2)}px) scale(${Math.round(gk * 1000) / 1000})` },
-    rig: { t: `translate(${r2(rigX)}px,0px) rotate(${r2(rigRot)}deg) scale(${r2(1 + 0.045 * shout)})` },
-    shout: { t: tf(-182, -118, -8, 1 + 0.35 * shout), o: r2(1 - prog(q, sub(P.morph, 0, 0.3))) },
-    shell: { w: r2(w), h: r2(h), r: r2(r) },
-    // the light screen fades in over the white card first, so the bezel only ever shows as a growing dark rim
-    cardFace: { o: r2(1 - prog(q, sub(P.morph, 0.3, 0.5))) },
-    bezel: { o: r2(prog(q, sub(P.morph, 0.15, 0.45))) },
-    screen: { o: r2(prog(q, sub(P.morph, 0.05, 0.3))), r: r2(Math.max(0, r - PHONE.bezel)) },
-    lightUi: { o: r2(prog(q, sub(P.morph, 0.65, 0.95))) },
-    island: { o: r2(prog(q, sub(P.morph, 0.55, 0.9))) },
-    camera: { o: r2(cam) },
-    scene: { t: tf(lerp(70, 0, pan) + swX, swY) },
-    item: { t: tf(lerp(190, 0, ease.back(itemIn, 1.4)) + swX * 1.4, ITEM_Y + swY, lerp(22, -4, ease.out(itemIn))) },
-    grid: { o: r2(cam * 0.9) },
-    bTL: { t: tf(-bx, ITEM_Y - by) },
-    bTR: { t: tf(bx, ITEM_Y - by) },
-    bBL: { t: tf(-bx, ITEM_Y + by) },
-    bBR: { t: tf(bx, ITEM_Y + by) },
-    shutter: { t: tf(0, 196, 0, press) },
-    d3: digit(0),
-    d2: digit(1),
-    d1: digit(2),
-    prompt: { t: tf(0, lerp(lerp(-4, -150, toScreen), -180, cam), 0, lerp(lerp(1, 0.66, toScreen), 0.5, cam)) },
-    promptLight: { o: r2(cam) },
-    snappy: {
-      t: tf(
-        lerp(150, 0, he),
-        lerp(98, LENS_Y, he) - Math.sin(Math.PI * hop) * 130 - shout * 18 - 6 * cheerPop,
-        lerp(10, 0, he) - 360 * he,
-        lerp(1, 0.36, he) + 0.08 * cheerPop,
-      ),
-    },
-    cheer: { o: r2(prog(q, sub(P.win, 0, 0.1))) },
-    polaroid: { t: tf(px, py, prot, ps * winPop), o: r2(prog(q, sub(P.locked, 0, 0.06))) },
-    locked: { t: tf(lx, ly, prot - 10, ease.spring(lockT) * ps), o: r2(clamp01(lockT * 5)) },
-    crown: { t: tf(cx, cy, prot - 22 + lerp(-40, 0, ease.out(crownT)), ease.spring(crownT) * ps), o: r2(clamp01(crownT * 5)) },
-    time: STORYBOARD.winTime * prog(q, [timerStart, SHUTTER]),
-    ctaIn: ease.out(prog(q, sub(P.win, 0.35, 0.85))),
-  };
-}
-
-const toReact = (s: St | undefined): React.CSSProperties | undefined =>
-  s && { transform: s.t, opacity: s.o, width: s.w, height: s.h, borderRadius: s.r };
-/** Server render = the first frame, so the page paints the resting state and hydration changes nothing. */
-const FIRST = frame(0, { mobile: false, ctaRoom: 0 });
-const INIT = Object.fromEntries(PARTS.map((k) => [k, toReact(FIRST[k])])) as Record<Part, React.CSSProperties | undefined>;
-const CTA_INIT: React.CSSProperties = { opacity: 0, transform: "translateY(16px)" };
+  /** Smooth wheel scrolling (Lenis); touch stays native. */
+  lenis: { lerp: 0.1 },
+} satisfies StoryConfig;
 
 /* ------------------------------------------ pieces ------------------------------------------ */
 
 const C = "absolute left-1/2 top-1/2";
-type Styled = HTMLElement | SVGElement;
+const REST = Object.fromEntries(PARTS.map((k) => [k, restStyle(k)])) as Record<Part, React.CSSProperties | undefined>;
 
 /** The camera's view of the "room": a dim purple backdrop with a floor and a few out-of-focus lights. */
 function Backdrop({ className }: { className?: string }) {
@@ -271,13 +105,18 @@ function PromptText({ item, light = false }: { item: SnapItem; light?: boolean }
 
 const corner = "absolute size-[30px] border-white";
 
+/** Runs `fn` in an idle moment (or soon, where requestIdleCallback is missing). */
+function whenIdle(fn: () => void) {
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(fn, { timeout: 2000 });
+  else globalThis.setTimeout(fn, 300);
+}
+
 /* ---------------------------------------- the section ---------------------------------------- */
 
 /**
- * "One shout. Everyone runs.": a pinned, scroll-scrubbed replay of one round (see STORYBOARD above).
- * The pin is CSS `position: sticky` (compositor-driven, so no iOS jitter); a small rAF loop eases the
- * scene towards the scroll position and draws `frame(q)`. Transforms and opacity only, except the
- * card → phone size morph. Reduced motion: no pin, a static three-step version.
+ * "One shout. Everyone runs.": a pinned replay of one round (see STORYBOARD above and engine.ts). The pin is CSS
+ * `position: sticky` (compositor-driven, no iOS jitter). The GSAP + Lenis engine is code-split and starts lazily
+ * after the hero has loaded. Reduced motion: no pin, no smooth scrolling, a static three-step version.
  */
 export function SnapStory() {
   const [index, setIndex] = useState(0);
@@ -291,34 +130,35 @@ export function SnapStory() {
   const stageRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<HTMLOListElement>(null);
   const els = useRef<Partial<Record<Part, Styled | null>>>({});
-  /** Last value written per element and property (skips redundant style writes). Cleared when React swaps a node. */
-  const written = useRef<Partial<Record<Part, St>>>({});
-  const [bind] = useState(() => Object.fromEntries(PARTS.map((k) => [k, (el: Styled | null) => {
-    if (els.current[k] !== el) delete written.current[k];
-    els.current[k] = el;
-  }])) as Record<Part, (el: Styled | null) => void>);
+  const [bind] = useState(() => Object.fromEntries(PARTS.map((k) => [k, (el: Styled | null) => { els.current[k] = el; }])) as Record<Part, (el: Styled | null) => void>);
 
   const click = useShutterSound();
   const sound = useRef({ on: true, click });
   useEffect(() => { sound.current = { on: !muted, click }; });
   // Sound is on by default, but browsers only allow audio after a real gesture (click, tap, key; a scroll
   // doesn't count). Use the browser's own flag where it exists, else watch for one.
+  // The audio context is created ahead of time in an idle moment after the first gesture (creating it takes
+  // ~100–200 ms, far too long for the snap frame), and resumed from later gestures (that's what unlocks iOS).
   const interacted = useRef(false);
   useEffect(() => {
-    const mark = () => { interacted.current = true; };
-    window.addEventListener("pointerup", mark, { once: true, capture: true });
-    window.addEventListener("keydown", mark, { once: true, capture: true });
-    return () => { window.removeEventListener("pointerup", mark, { capture: true }); window.removeEventListener("keydown", mark, { capture: true }); };
+    const onGesture = () => {
+      interacted.current = true;
+      const s = sound.current;
+      if (!s.on) return;
+      if (s.click.created()) s.click.warm(); // cheap: resume inside the gesture
+      else whenIdle(() => sound.current.click.warm());
+    };
+    window.addEventListener("pointerup", onGesture, { capture: true, passive: true });
+    window.addEventListener("keydown", onGesture, { capture: true });
+    return () => { window.removeEventListener("pointerup", onGesture, { capture: true }); window.removeEventListener("keydown", onGesture, { capture: true }); };
   }, []);
-  const canPlay = () => (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive ?? interacted.current;
-  const canPlayRef = useRef(canPlay);
 
-  // Fit the stage to its area right away (cheap); the scroll loop itself starts lazily (below).
+  // Fit the stage to its area right away (cheap); the engine itself starts lazily (below).
   useEffect(() => {
     const area = areaRef.current, stage = stageRef.current;
     if (!area || !stage) return;
     const fit = () => {
-      const s = Math.min(area.clientWidth / W, area.clientHeight / H, 1.1);
+      const s = Math.min(area.clientWidth / 440, area.clientHeight / 600, 1.1);
       if (s > 0) stage.style.setProperty("--fit", String(Math.round(s * 1000) / 1000));
     };
     fit();
@@ -327,125 +167,41 @@ export function SnapStory() {
     return () => ro.disconnect();
   }, []);
 
-  // The scroll engine.
+  // The engine (GSAP + ScrollTrigger + Lenis), code-split. Starts after the page (hero) has loaded and the main
+  // thread is idle, or as soon as the section comes near the viewport, whichever is first. Never with reduced motion.
   useEffect(() => {
     const section = sectionRef.current, pin = pinRef.current, area = areaRef.current, stage = stageRef.current;
     if (!section || !pin || !area || !stage) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const prev = written.current;
-    let layout: Layout = { mobile: false, ctaRoom: 0 };
-    let shown = -1; // drawn progress (-1 = nothing drawn yet: jump straight to the scroll position)
-    let raf = 0, last = 0, visible = false, running = false;
-    let kickAt = -1, kicked = false, played = false, confetti = false;
-    let lastTime = "";
+    let stop: (() => void) | undefined;
+    let gone = false, starting = false;
 
-    const write = (k: Part, s: St | undefined) => {
-      const el = els.current[k];
-      if (!el || !s) return;
-      const p = (prev[k] ??= {});
-      if (s.t !== undefined && s.t !== p.t) el.style.transform = p.t = s.t;
-      if (s.o !== undefined && s.o !== p.o) el.style.opacity = String((p.o = s.o));
-      if (s.w !== undefined && s.w !== p.w) el.style.width = `${(p.w = s.w)}px`;
-      if (s.h !== undefined && s.h !== p.h) el.style.height = `${(p.h = s.h)}px`;
-      if (s.r !== undefined && s.r !== p.r) el.style.borderRadius = `${(p.r = s.r)}px`;
-    };
-    const draw = (q: number) => {
-      const f = frame(q, layout);
-      for (const k of PARTS) write(k, f[k]);
-      const time = fmtTime(f.time);
-      const timer = els.current.timer;
-      if (timer && time !== lastTime) timer.textContent = lastTime = time;
-      const cta = els.current.cta;
-      if (cta) {
-        write("cta", { o: r2(f.ctaIn), t: `translateY(${r2((1 - f.ctaIn) * 16)}px)` });
-        cta.style.pointerEvents = f.ctaIn > 0.5 ? "" : "none";
-      }
-    };
-    /** The snap: flash, punch and a tiny shake, on the clock. */
-    const drawKick = (now: number) => {
-      const t = kickAt < 0 ? Infinity : now - kickAt;
-      const { flashMs, punchMs, shakeMs } = STORYBOARD;
-      const active = t < Math.max(flashMs, punchMs, shakeMs);
-      if (!active && !kicked) return false;
-      kicked = active;
-      const fl = !active ? 0 : t < flashMs * 0.3 ? t / (flashMs * 0.3) : Math.max(0, 1 - (t - flashMs * 0.3) / (flashMs * 0.7));
-      const amp = active ? Math.max(0, 1 - t / shakeMs) ** 2 : 0;
-      const punch = active && t < punchMs ? 1 + 0.03 * Math.sin((Math.PI * t) / punchMs) : 1;
-      write("kick", { t: `translate(${r2(5 * amp * Math.sin(t * 0.14))}px,${r2(3 * amp * Math.cos(t * 0.17))}px) rotate(${r2(0.8 * amp * Math.sin(t * 0.11))}deg) scale(${r2(punch * 1000) / 1000})` });
-      write("flash", { o: r2(fl) });
-      write("roomFlash", { o: r2(fl * 0.35) });
-      return active;
-    };
-
-    const measure = () => {
-      const vw = document.documentElement.clientWidth;
-      const mobile = vw < STORYBOARD.desktopFrom;
-      let ctaRoom = 0;
-      const cta = els.current.cta as HTMLElement | null | undefined;
-      const s = parseFloat(stage.style.getPropertyValue("--fit")) || 1;
-      if (mobile && cta) {
-        // the CTA is laid over the bottom of the stage area: measure the overlap (layout boxes, not transforms)
-        const overlap = area.offsetTop + area.offsetHeight - cta.offsetTop + 12;
-        ctaRoom = Math.max(0, overlap) / s;
-      }
-      layout = { mobile, ctaRoom: Math.min(ctaRoom, H * 0.4) };
-      for (const k of PARTS) delete prev[k];
-      if (shown >= 0) draw(shown);
-    };
-
-    const tick = (now: number) => {
-      raf = 0;
-      const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
-      last = now;
-      const box = section.getBoundingClientRect();
-      const len = box.height - pin.offsetHeight;
-      const target = len > 0 ? clamp01(-box.top / len) : 0;
-      let q = shown < 0 || STORYBOARD.scrub <= 0 ? target : shown + (target - shown) * (1 - Math.exp(-dt / STORYBOARD.scrub));
-      if (Math.abs(target - q) < 0.0005) q = target;
-      const from = shown < 0 ? q : shown;
-
-      // one-shot moments, forward only (the scrubbed state itself is reversible)
-      if (from < SHUTTER && q >= SHUTTER) {
-        kickAt = now;
-        if (sound.current.on && canPlayRef.current()) sound.current.click();
-      }
-      if (!confetti && q >= CONFETTI_AT && from < CONFETTI_AT) { confetti = true; setBurst((b) => b + 1); }
-      if (confetti && q < CONFETTI_AT - 0.03) { confetti = false; setBurst(0); }
-      // the rotation: back above the section → the host calls the next item
-      if (q > 0.1) played = true;
-      if (played && target <= 0 && box.top > 0) { played = false; setIndex((i) => (i + 1) % SNAP_ITEMS.length); }
-
-      if (q !== shown) { draw(q); shown = q; }
-      const kicking = drawKick(now);
-      if (visible && (q !== target || kicking)) raf = requestAnimationFrame(tick);
-      else last = 0;
-    };
-    const wake = () => { if (running && !raf) raf = requestAnimationFrame(tick); };
-
-    const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; wake(); }, { rootMargin: "10% 0px" });
-    let resizeQueued = 0;
-    const onResize = () => { cancelAnimationFrame(resizeQueued); resizeQueued = requestAnimationFrame(() => { measure(); wake(); }); };
-    const ro = new ResizeObserver(onResize);
-
+    const canPlay = () => (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive ?? interacted.current;
     const start = () => {
-      if (running || reduced.matches) return;
-      running = true;
-      measure();
-      io.observe(section);
-      ro.observe(pin);
-      window.addEventListener("scroll", wake, { passive: true });
-      window.addEventListener("resize", onResize);
+      if (stop || starting || gone || reduced.matches) return;
+      starting = true;
+      void import("./engine").then(({ startSnapStory }) => {
+        starting = false;
+        if (gone || reduced.matches || stop) return;
+        // the visitor interacted before this mounted: warm the shutter now, in an idle moment
+        if (sound.current.on && canPlay() && !sound.current.click.created()) {
+          whenIdle(() => sound.current.click.warm());
+        }
+        stop = startSnapStory({
+          config: STORYBOARD, section, pin, area, stage, els: els.current,
+          onSnap: () => {
+            const s = sound.current;
+            if (!s.on || !canPlay()) return;
+            // never create the audio context here (slow, mid-animation): it's warmed after the visitor's first gesture
+            if (s.click.created()) s.click();
+          },
+          onConfetti: (on) => setBurst((b) => (on ? b + 1 : 0)),
+          onNextItem: () => setIndex((i) => (i + 1) % SNAP_ITEMS.length),
+        });
+      });
     };
-    const stop = () => {
-      running = false;
-      cancelAnimationFrame(raf); raf = 0; last = 0;
-      io.disconnect(); ro.disconnect();
-      window.removeEventListener("scroll", wake);
-      window.removeEventListener("resize", onResize);
-    };
+    const halt = () => { stop?.(); stop = undefined; setBurst(0); };
 
-    // Lazy init: after the page (hero) has loaded and the main thread is idle, or as soon as the section
-    // comes near the viewport, whichever is first. Never competes with the hero's LCP.
     let idle = 0, timer = 0;
     const hasIdle = "requestIdleCallback" in window;
     const onLoad = () => { idle = hasIdle ? window.requestIdleCallback(start, { timeout: 1500 }) : window.setTimeout(start, 200); };
@@ -454,10 +210,11 @@ export function SnapStory() {
     const near = new IntersectionObserver(([e]) => { if (e.isIntersecting) { near.disconnect(); timer = window.setTimeout(start, 0); } }, { rootMargin: "75% 0px" });
     near.observe(section);
 
-    const onMotionPref = () => { if (reduced.matches) stop(); else start(); };
+    const onMotionPref = () => { if (reduced.matches) halt(); else start(); };
     reduced.addEventListener("change", onMotionPref);
     return () => {
-      stop();
+      gone = true;
+      halt();
       near.disconnect();
       if (hasIdle) window.cancelIdleCallback(idle); else window.clearTimeout(idle);
       window.clearTimeout(timer);
@@ -497,8 +254,8 @@ export function SnapStory() {
             </p>
             <div
               ref={bind.cta}
-              style={CTA_INIT}
-              className="absolute inset-x-5 bottom-5 z-10 grid gap-2 focus-within:!opacity-100 focus-within:![transform:none] motion-reduce:static motion-reduce:mt-6 motion-reduce:!opacity-100 motion-reduce:![transform:none] sm:flex sm:justify-center md:static md:mt-8 md:justify-start md:motion-reduce:justify-center"
+              style={{ ...REST.cta, pointerEvents: "none" }}
+              className="absolute inset-x-5 bottom-5 z-10 grid gap-2 focus-within:!pointer-events-auto focus-within:!opacity-100 focus-within:![transform:none] motion-reduce:static motion-reduce:mt-6 motion-reduce:!pointer-events-auto motion-reduce:!opacity-100 motion-reduce:![transform:none] sm:flex sm:justify-center md:static md:mt-8 md:justify-start md:motion-reduce:justify-center"
             >
               <Button asChild size="lg" className="group">
                 <Link href="/play"><Camera aria-hidden="true" className="group-hover:animate-wiggle motion-reduce:animate-none" /> Play free — no app needed</Link>
@@ -516,87 +273,91 @@ export function SnapStory() {
               aria-hidden="true"
               className="absolute left-1/2 top-1/2 h-[600px] w-[440px] select-none [--fit:0.6] [transform:translate(-50%,-50%)_scale(var(--fit))] md:[--fit:1]"
             >
-              <div ref={bind.group} style={INIT.group} className="absolute inset-0">
-                {/* "shout" lines off the card's corner */}
-                <svg ref={bind.shout} style={INIT.shout} viewBox="0 0 60 60" className={cn(C, "w-[60px] text-brand-coral")} fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round">
-                  <path d="M30 8v14M8 30h14M14 14l9 9" />
-                </svg>
-
-                <div ref={bind.rig} style={INIT.rig} className="absolute inset-0">
-                  <div ref={bind.kick} className="absolute inset-0">
-                    {/* card → phone */}
-                    <div ref={bind.shell} style={INIT.shell} className={cn(C, "-translate-x-1/2 -translate-y-1/2 overflow-hidden shadow-[0_30px_60px_-24px_rgb(42_15_92/0.55)]")}>
-                      <div ref={bind.bezel} style={INIT.bezel} className="absolute inset-0 bg-brand-night" />
-                      <div ref={bind.cardFace} style={INIT.cardFace} className="absolute inset-0 bg-card">
+              <div ref={bind.group} style={REST.group} className="absolute inset-0">
+                <div ref={bind.rigMorph} style={REST.rigMorph} className="absolute inset-0">
+                  <div ref={bind.rigSlide} className="absolute inset-0">
+                    <div ref={bind.kick} className="absolute inset-0">
+                      {/* the card: one pre-rendered layer (shadow included) that turns, stretches and fades */}
+                      <div ref={bind.card} style={REST.card} className={cn(C, "h-[216px] w-[352px] rounded-[30px] bg-card shadow-[0_30px_60px_-24px_rgb(42_15_92/0.55)]")}>
                         <span className="absolute left-5 top-4 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-primary">Round 1</span>
+                        {/* "shout" lines off the card's corner */}
+                        <svg ref={bind.shout} style={REST.shout} viewBox="0 0 60 60" className="absolute -left-9 -top-10 w-[60px] text-brand-coral" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round">
+                          <path d="M30 8v14M8 30h14M14 14l9 9" />
+                        </svg>
                       </div>
-                      <div ref={bind.screen} style={INIT.screen} className="absolute inset-[9px] overflow-hidden bg-background">
-                        {/* the player's prompt screen */}
-                        <div ref={bind.lightUi} style={INIT.lightUi} className="absolute inset-0">
-                        <span className={cn(C, "flex h-12 w-[180px] -translate-x-1/2 translate-y-[166px] items-center justify-center gap-2 rounded-2xl bg-brand-coral font-display text-lg font-bold text-white shadow-pop-coral")}>
-                          <Camera className="size-5" /> Open camera
-                        </span>
-                        <span className={cn(C, "grid -translate-x-1/2 -translate-y-1/2 justify-items-center gap-1 text-center text-sm font-semibold text-muted-foreground")}>
-                          <span className="grid size-16 place-items-center rounded-full border-2 border-dashed border-primary/30 text-primary"><Camera className="size-7" /></span>
-                          Find it. Snap it.
-                        </span>
-                        </div>
-                        {/* the camera */}
-                        <div ref={bind.camera} style={INIT.camera} className="absolute inset-0 bg-brand-night">
-                          <div ref={bind.scene} style={INIT.scene} className={cn(C, "h-[520px] w-[380px]")}>
-                            <Backdrop className="absolute inset-0" />
-                          </div>
-                          <div ref={bind.grid} style={INIT.grid} className="absolute inset-0">
-                            <span className="absolute inset-y-0 left-1/3 w-px bg-white/25" />
-                            <span className="absolute inset-y-0 left-2/3 w-px bg-white/25" />
-                            <span className="absolute inset-x-0 top-1/3 h-px bg-white/25" />
-                            <span className="absolute inset-x-0 top-2/3 h-px bg-white/25" />
-                          </div>
-                          <div ref={bind.item} style={INIT.item} className={cn(C, "w-[168px]")}>
-                            <item.Art className="block w-full" />
-                          </div>
-                          <span ref={bind.bTL} style={INIT.bTL} className={cn(C, corner, "rounded-tl-xl border-l-4 border-t-4")} />
-                          <span ref={bind.bTR} style={INIT.bTR} className={cn(C, corner, "rounded-tr-xl border-r-4 border-t-4")} />
-                          <span ref={bind.bBL} style={INIT.bBL} className={cn(C, corner, "rounded-bl-xl border-b-4 border-l-4")} />
-                          <span ref={bind.bBR} style={INIT.bBR} className={cn(C, corner, "rounded-br-xl border-b-4 border-r-4")} />
-                          <span className={cn(C, "flex -translate-x-1/2 -translate-y-[150px] items-center gap-1 rounded-full bg-black/35 px-3 py-1 font-mono text-sm font-bold tabular-nums text-white")}>
-                            <Timer className="size-4 text-brand-yellow" />
-                            <span ref={bind.timer}>{fmtTime(0)}</span>
-                          </span>
-                          {(["d3", "d2", "d1"] as const).map((k, i) => (
-                            <span key={k} ref={bind[k]} style={INIT[k]} className={cn(C, "font-display text-[96px] font-bold leading-none text-brand-yellow [text-shadow:0_6px_0_hsl(var(--brand-yellow-deep))]")}>{3 - i}</span>
-                          ))}
-                          <span ref={bind.shutter} style={INIT.shutter} className={cn(C, "grid size-[62px] place-items-center rounded-full border-4 border-white p-1")}>
-                            <span className="size-full rounded-full bg-brand-coral" />
-                          </span>
-                          <span ref={bind.flash} style={{ opacity: 0 }} className="absolute inset-0 bg-white" />
-                        </div>
-                      </div>
-                      <span ref={bind.island} style={INIT.island} className="absolute left-1/2 top-[15px] h-[26px] w-[84px] -translate-x-1/2 rounded-full bg-black" />
-                    </div>
 
-                    {/* the prompt (shrinks from the card into the phone screen) */}
-                    <div ref={bind.prompt} style={INIT.prompt} className={cn(C, "w-[310px] text-center")}>
-                      <div key={item.key} className="relative animate-pop-in">
-                        <PromptText item={item} />
-                        <span ref={bind.promptLight} style={INIT.promptLight} className="absolute inset-0"><PromptText item={item} light /></span>
+                      {/* the phone: the other pre-rendered layer (bezel, screen, island), turned upright by the morph */}
+                      <div ref={bind.phone} style={REST.phone} className={cn(C, "h-[510px] w-[250px] rounded-[46px] bg-brand-night p-[9px] shadow-[0_30px_60px_-24px_rgb(42_15_92/0.55)]")}>
+                        <div className="relative size-full overflow-hidden rounded-[37px] bg-background">
+                          {/* the player's prompt screen */}
+                          <span className={cn(C, "flex h-12 w-[180px] -translate-x-1/2 translate-y-[166px] items-center justify-center gap-2 rounded-2xl bg-brand-coral font-display text-lg font-bold text-white shadow-pop-coral")}>
+                            <Camera className="size-5" /> Open camera
+                          </span>
+                          <span className={cn(C, "grid -translate-x-1/2 -translate-y-1/2 justify-items-center gap-1 text-center text-sm font-semibold text-muted-foreground")}>
+                            <span className="grid size-16 place-items-center rounded-full border-2 border-dashed border-primary/30 text-primary"><Camera className="size-7" /></span>
+                            Find it. Snap it.
+                          </span>
+                          {/* the camera */}
+                          <div ref={bind.camera} style={REST.camera} className="absolute inset-0 bg-brand-night">
+                            <div ref={bind.scene} style={REST.scene} className={cn(C, "h-[520px] w-[380px]")}>
+                              <Backdrop className="absolute inset-0" />
+                            </div>
+                            <div className="absolute inset-0">
+                              <span className="absolute inset-y-0 left-1/3 w-px bg-white/25" />
+                              <span className="absolute inset-y-0 left-2/3 w-px bg-white/25" />
+                              <span className="absolute inset-x-0 top-1/3 h-px bg-white/25" />
+                              <span className="absolute inset-x-0 top-2/3 h-px bg-white/25" />
+                            </div>
+                            <div ref={bind.item} style={REST.item} className={cn(C, "w-[168px]")}>
+                              <item.Art className="block w-full" />
+                            </div>
+                            <span ref={bind.bTL} style={REST.bTL} className={cn(C, corner, "rounded-tl-xl border-l-4 border-t-4")} />
+                            <span ref={bind.bTR} style={REST.bTR} className={cn(C, corner, "rounded-tr-xl border-r-4 border-t-4")} />
+                            <span ref={bind.bBL} style={REST.bBL} className={cn(C, corner, "rounded-bl-xl border-b-4 border-l-4")} />
+                            <span ref={bind.bBR} style={REST.bBR} className={cn(C, corner, "rounded-br-xl border-b-4 border-r-4")} />
+                            <span className={cn(C, "flex -translate-x-1/2 -translate-y-[150px] items-center gap-1 rounded-full bg-black/35 px-3 py-1 font-mono text-sm font-bold tabular-nums text-white")}>
+                              <Timer className="size-4 text-brand-yellow" />
+                              <span ref={bind.timer}>{fmtTime(0)}</span>
+                            </span>
+                            {(["d3", "d2", "d1"] as const).map((k, i) => (
+                              <span key={k} ref={bind[k]} style={REST[k]} className={cn(C, "font-display text-[96px] font-bold leading-none text-brand-yellow [text-shadow:0_6px_0_hsl(var(--brand-yellow-deep))]")}>{3 - i}</span>
+                            ))}
+                            <span ref={bind.shutter} style={REST.shutter} className={cn(C, "grid size-[62px] place-items-center rounded-full border-4 border-white p-1")}>
+                              <span className="size-full rounded-full bg-brand-coral" />
+                            </span>
+                            <span ref={bind.flash} style={REST.flash} className="absolute inset-0 bg-white" />
+                          </div>
+                        </div>
+                        <span className="absolute left-1/2 top-[15px] h-[26px] w-[84px] -translate-x-1/2 rounded-full bg-black" />
                       </div>
-                    </div>
 
-                    {/* Snappy: beside the card, then the phone's lens */}
-                    <div ref={bind.snappy} style={INIT.snappy} className={cn(C, "w-[120px]")}>
-                      <Mascot mood="happy" className="block w-full" />
-                      <span ref={bind.cheer} style={INIT.cheer} className="absolute inset-0"><Mascot mood="cheer" className="block w-full" /></span>
+                      {/* the prompt (shrinks from the card into the phone screen, then up into the camera HUD) */}
+                      <div ref={bind.promptOuter} style={REST.promptOuter} className={cn(C, "w-[310px] text-center")}>
+                        <div ref={bind.promptInner} className="relative">
+                          <span key={item.key} className="block animate-pop-in"><PromptText item={item} /></span>
+                          <span ref={bind.promptLight} style={REST.promptLight} className="absolute inset-0">
+                            <span key={item.key} className="block animate-pop-in"><PromptText item={item} light /></span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Snappy: beside the card, then the phone's lens */}
+                      <div ref={bind.snappyOuter} style={REST.snappyOuter} className={cn(C, "w-[120px]")}>
+                        <div ref={bind.snappyInner} className="relative">
+                          <Mascot mood="happy" className="block w-full" />
+                          <span ref={bind.cheer} style={{ ...REST.cheer, display: "none" }} className="absolute inset-0"><Mascot mood="cheer" className="block w-full" /></span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* locked in */}
-                <div ref={bind.polaroid} style={INIT.polaroid} className={C}>
-                  <Polaroid item={item} />
+                <div ref={bind.polaroid} style={REST.polaroid} className={C}>
+                  <div ref={bind.polaroidInner}><Polaroid item={item} /></div>
                 </div>
-                <div ref={bind.locked} style={INIT.locked} className={C}><LockedBadge /></div>
-                <div ref={bind.crown} style={INIT.crown} className={C}><CrownBadge /></div>
+                <div ref={bind.locked} style={REST.locked} className={C}><LockedBadge /></div>
+                <div ref={bind.crown} style={REST.crown} className={C}><CrownBadge /></div>
               </div>
             </div>
 
@@ -649,7 +410,7 @@ export function SnapStory() {
           </ol>
         </div>
 
-        <span ref={bind.roomFlash} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute inset-0 bg-white motion-reduce:hidden" />
+        <span ref={bind.roomFlash} aria-hidden="true" style={REST.roomFlash} className="pointer-events-none absolute inset-0 bg-white motion-reduce:hidden" />
         {burst > 0 ? <Confetti key={burst} once pieces={36} /> : null}
       </div>
     </section>

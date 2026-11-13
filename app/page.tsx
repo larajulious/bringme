@@ -5,6 +5,7 @@ import { Camera, Gamepad2 } from "lucide-react";
 
 import { Backdrop } from "@/components/brand/backdrop";
 import { Logo } from "@/components/brand/logo";
+import { OffscreenPause } from "@/components/layout/offscreen-pause";
 import { SiteHeader } from "@/components/layout/site-header";
 import { Audience } from "@/components/marketing/audience";
 import { ExtraFun } from "@/components/marketing/extra-fun";
@@ -49,6 +50,7 @@ export default function Home() {
       <StructuredData />
       <div className="paper-edge-bottom relative isolate flex min-h-svh flex-col overflow-clip bg-gradient-to-b from-primary to-brand-night text-white">
         <Backdrop />
+        <OffscreenPause />
         <StoryStage name="hero" tone="night" />
         <SiteHeader compactMobile />
 
@@ -82,14 +84,17 @@ export default function Home() {
         <div className="relative isolate">
           {/* reaches under the hero's torn edge and into the gap above the paper section, so no strip goes undrawn */}
           <StoryStage name="how" tone="lavender" className="-bottom-6 -top-3" />
+          <OffscreenPause />
           <HowItWorks />
         </div>
         <Audience />
         <div className="relative isolate">
           <StoryStage name="extra" tone="lavender" className="-top-6" />
+          <OffscreenPause />
           <ExtraFun />
         </div>
         <div className="relative isolate">
+          <OffscreenPause />
           <StoryStage name="pricing" tone="lavender" />
           <PricingSection>
             <Suspense fallback={<PricingSkeleton />}>

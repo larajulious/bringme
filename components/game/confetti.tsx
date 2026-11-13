@@ -17,7 +17,9 @@ export function Confetti({ pieces = 44, className = "", once = false }: { pieces
           height: i % 3 === 0 ? size : size * 1.8,
           "--dur": `${3.2 + ((i * 13) % 20) / 10}s`,
           "--delay": once ? `${((i * 29) % 30) / 100}s` : `${-((i * 29) % 40) / 10}s`,
-          ...(once ? { animationIterationCount: 1, animationFillMode: "forwards" } : null),
+          // "both": during its start delay a piece already holds the first keyframe (invisible, above the frame)
+          // instead of sitting fully visible at the top edge and then blinking out as it starts.
+          ...(once ? { animationIterationCount: 1, animationFillMode: "both" } : null),
           "--drift": `${((i * 17) % 120) - 60}px`,
           "--spin": `${360 + ((i * 53) % 540)}deg`,
         } as React.CSSProperties;
