@@ -17,6 +17,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  partialPrefetching: false,
   poweredByHeader: false,
   // Dev only (ignored by `next start`): let a Cloudflare quick tunnel load dev
   // JS/HMR. Without it the page never hydrates and forms submit natively.
