@@ -11,6 +11,7 @@ import { ExtraFun } from "@/components/marketing/extra-fun";
 import { HeroScene } from "@/components/marketing/hero-scene";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { Pricing, PricingSection, PricingSkeleton } from "@/components/marketing/pricing";
+import { SnapStory } from "@/components/marketing/snap-story/snap-story";
 import { StoryStage } from "@/components/marketing/story/stage";
 import { StoryDriver } from "@/components/marketing/story/story-driver";
 import { SiteFooter } from "@/components/marketing/legal-page";
@@ -75,6 +76,8 @@ export default function Home() {
       </div>
 
       <main>
+        {/* "One shout. Everyone runs.": pinned, scroll-scrubbed replay of one round (components/marketing/snap-story). */}
+        <SnapStory />
         {/* Scroll story: one continuous scene behind every section (decorative; see components/marketing/story). */}
         <div className="relative isolate">
           {/* reaches under the hero's torn edge and into the gap above the paper section, so no strip goes undrawn */}
@@ -93,6 +96,12 @@ export default function Home() {
               <Pricing />
             </Suspense>
           </PricingSection>
+          {/* Phones: pops up beside Snappy's footer sneak when the visitor keeps scrolling at the end (story/engine.ts). */}
+          <div data-sneak-cta className="sneak-cta absolute bottom-4 z-10 md:hidden">
+            <Button asChild className="group">
+              <Link href="/play"><Camera aria-hidden="true" className="group-hover:animate-wiggle motion-reduce:animate-none" /> Play now</Link>
+            </Button>
+          </div>
         </div>
       </main>
 

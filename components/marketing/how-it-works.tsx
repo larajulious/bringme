@@ -224,8 +224,8 @@ export function HowItWorks() {
 
   return (
     <Reveal
-      as="section" aria-labelledby="how-heading" onEnter={start}
-      className="relative isolate mx-auto flex min-h-svh w-full max-w-6xl flex-col justify-center px-5 py-[clamp(3rem,8svh,6rem)]"
+      as="section" id="how-it-works" aria-labelledby="how-heading" onEnter={start}
+      className="relative isolate mx-auto scroll-mt-6 flex min-h-svh w-full max-w-6xl flex-col justify-center px-5 py-[clamp(3rem,8svh,6rem)]"
     >
       <div className="mb-[clamp(2rem,6svh,4rem)] text-center">
         <h2 id="how-heading" className="reveal-item mb-3 text-3xl font-bold text-primary sm:text-4xl lg:text-5xl">How it works</h2>

@@ -12,6 +12,9 @@ import { apply, buildRig, extent, type Placement, type Rig } from "./rig";
  * Phones: every section owns a `[data-story-stage]` with a viewport-sized "window" that a native scroll-driven
  * animation (globals.css) pins to the viewport; the pricing window draws the footer sneak (time-based too).
  *
+ * Phones, at the very end: once Snappy has popped up and grinned, scrolling on (a further drag, wheel or key down
+ * while already at the bottom) springs a real "Play now" button out beside him (`[data-sneak-cta]`, app/page.tsx).
+ *
  * The loop only runs while a section with a stage is on screen. Reduced motion: each beat's resting frame, no loop.
  * ---------------------------------------------------------------------------------------------- */
 
@@ -21,6 +24,10 @@ const NS = "http://www.w3.org/2000/svg";
 const BEATS: BeatName[] = ["hero", "audience", "extra", "pricing"];
 /** Room his head and raised hand may take above a greeting section's top edge (over the previous section's padding). */
 const HEADROOM = 20;
+/** Phones: the sneak must have played this far (s: he's up and grinning) before scrolling on reveals "Play now". */
+const CTA_AFTER = 1.5;
+/** Reduced motion (no sneak clock): how long the visitor must already have been at the end (ms). */
+const CTA_STILL_AFTER = 600;
 
 type Stage = { name: string; el: HTMLElement; win: HTMLElement; svg: SVGSVGElement; rig: Rig; on: boolean };
 type Layer = {
@@ -82,6 +89,11 @@ export function startStory(): () => void {
   let footerTop = 0;
   let maxScroll = 1;
   let sneakT = 0;
+  /** Phones: the "Play now" beside the sneak, whether the visitor has scrolled on past the end, and since when they're there. */
+  const cta = document.querySelector<HTMLElement>("[data-sneak-cta]");
+  let pushed = false;
+  let endSince = 0;
+  let touchY: number | null = null;
 
   /** Text's own extent (block boxes span the whole column even when the text is centred). */
   function textBox(e: Element) {
@@ -121,6 +133,7 @@ export function startStory(): () => void {
       }
     }
     layout = { vw, vh, mobile, spots: { audience: spots.audience ?? layout.spots.audience, extra: spots.extra ?? layout.spots.extra } };
+    if (cta) cta.style.right = `${Math.round(vw - extent(sneak(SNEAK_END, layout, 0, 0, true)).l + 16)}px`; // just left of Snappy (clear of his raised arm)
     beats = buildBeats(layout);
     // phones: Snappy only appears at the end, peeking over the footer (pricing window)
     for (const s of stages) s.rig.root.style.display = mobile && s.name === "pricing" ? "" : "none";
@@ -169,6 +182,40 @@ export function startStory(): () => void {
     apply(L.rig, pl);
   }
 
+  /* ------------------------------------------- phones: "Play now" ------------------------------------------- */
+
+  const atEnd = () => window.scrollY >= maxScroll - 40;
+  /** He's up (or, without motion, they've been at the end a moment): only then does scrolling on count. */
+  const ready = () => atEnd() && (still ? endSince > 0 && performance.now() - endSince > CTA_STILL_AFTER : sneakT >= CTA_AFTER);
+  function updateCta() {
+    if (!cta) return;
+    if (!atEnd()) endSince = 0;
+    else if (!endSince) endSince = performance.now();
+    if (window.scrollY < maxScroll - 120 || !layout.mobile) pushed = false; // scrolled away: hide, and ask again next time
+    const show = pushed && layout.mobile && window.scrollY >= maxScroll - 120 && (still || sneakT >= CTA_AFTER);
+    if (show !== ("show" in cta.dataset)) {
+      if (show) cta.dataset.show = "";
+      else delete cta.dataset.show;
+    }
+  }
+  /** The visitor tried to scroll further down. */
+  function push() {
+    updateCta();
+    if (!layout.mobile || pushed || !ready()) return;
+    pushed = true;
+    updateCta();
+  }
+  const onWheel = (e: WheelEvent) => { if (e.deltaY > 0) push(); };
+  const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0]?.clientY ?? null; };
+  const onTouchMove = (e: TouchEvent) => {
+    const y = e.touches[0]?.clientY;
+    if (touchY === null || y === undefined) return;
+    if (!atEnd()) touchY = y; // only the drag made *after* reaching the end counts
+    else if (touchY - y > 24) push(); // finger moving up = scrolling down
+  };
+  const onKey = (e: KeyboardEvent) => { if (["ArrowDown", "PageDown", "End", " "].includes(e.key)) push(); };
+  const onScroll = () => updateCta();
+
   /* --------------------------------------- still (reduced motion) --------------------------------------- */
 
   function renderStill() {
@@ -204,6 +251,7 @@ export function startStory(): () => void {
         if (!pinned) pricing.win.style.transform = `translateY(${y - (pricing.el.getBoundingClientRect().top + y)}px)`;
         apply(pricing.rig, sneak(sneakT, layout, footerTop - y, time));
       }
+      updateCta();
     } else {
       for (const L of layers) {
         const beat = beats[L.name];
@@ -241,6 +289,13 @@ export function startStory(): () => void {
   else for (const s of stages) io.observe(s.el);
   ro.observe(document.body);
   window.addEventListener("resize", onResize);
+  if (cta) {
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, { passive: true });
+  }
   requestAnimationFrame(() => { for (const s of stages) s.el.dataset.ready = ""; });
 
   return () => {
@@ -249,6 +304,12 @@ export function startStory(): () => void {
     io.disconnect();
     ro.disconnect();
     window.removeEventListener("resize", onResize);
+    window.removeEventListener("wheel", onWheel);
+    window.removeEventListener("touchstart", onTouchStart);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("keydown", onKey);
+    window.removeEventListener("scroll", onScroll);
+    if (cta) { delete cta.dataset.show; cta.style.right = ""; }
     for (const L of layers) L.el.remove();
     for (const s of stages) {
       s.svg.remove();

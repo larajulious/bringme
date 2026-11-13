@@ -343,6 +343,24 @@ html[data-fit-viewport] body {
     animation-range: cover 0% cover 100%;
   }
 }
+/* Phones: the "Play now" button beside Snappy's footer sneak. Hidden (and out of the tab order) until the engine sets
+ * data-show; then it springs out from his side. Its `right` is set by the engine, next to Snappy. */
+.sneak-cta {
+  right: 40vw;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(10px, 14px) scale(0.5) rotate(8deg);
+  transform-origin: 100% 100%;
+  transition: opacity 0.18s ease-out, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0s linear 0.45s;
+}
+.sneak-cta[data-show] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 0s;
+}
 [data-tone="night"]:is(.story-stage, .story-beat) { --shadow: 266 80% 6%; --shadow-a: 0.45; --fx-line: hsl(266 60% 82% / 0.7); --fx-dust: hsl(266 45% 78% / 0.55); }
 [data-tone="lavender"]:is(.story-stage, .story-beat) { --shadow: 266 50% 35%; --shadow-a: 0.2; --fx-line: hsl(266 50% 78%); --fx-dust: hsl(266 45% 88%); }
 [data-tone="paper"]:is(.story-stage, .story-beat) { --shadow: 30 30% 30%; --shadow-a: 0.2; --fx-line: hsl(36 30% 72%); --fx-dust: hsl(38 32% 85%); }
@@ -363,6 +381,13 @@ html[data-fit-viewport] body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Snap story (components/marketing/snap-story), reduced motion: the three still steps fade in (opacity only, no
+ * movement) once they scroll into view. Only hidden after JS has armed them, so they're never lost without it. */
+@media (prefers-reduced-motion: reduce) {
+  [data-snap-steps] > li { transition: opacity 0.6s ease-out calc(var(--i, 0) * 150ms) !important; }
+  [data-snap-steps="armed"] > li { opacity: 0; }
 }
 
 /* "Paper" section: warm sheet with torn zigzag edges and a soft lift, so it separates from neighbouring sections. Static. */
