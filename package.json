@@ -10,7 +10,8 @@
     "test:concurrency": "node tests/concurrency/engine-concurrency.mjs",
     "billing:audit": "node --env-file=.env.local scripts/polar-audit.ts",
     "disposable:update": "node --env-file=.env.local scripts/update-disposable-domains.ts",
-    "bench:realtime": "node --no-warnings tests/bench/realtime-sync.bench.mjs"
+    "bench:realtime": "node --no-warnings tests/bench/realtime-sync.bench.mjs",
+    "bench:photos": "node --no-warnings tests/bench/photo-storage.bench.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.1",

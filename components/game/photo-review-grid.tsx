@@ -18,7 +18,7 @@ const filterLabel: Record<Filter, string> = { pending: "To review", approved: "A
  * and a hint as soon as slower photos can no longer change the winner.
  */
 export function PhotoReviewGrid({
-  rows, locked, busyId, error, onReview, onOpen,
+  rows, locked, busyId, error, onReview, onOpen, onPhotoError,
 }: {
   rows: LiveSubmission[] | null;
   locked: boolean;
@@ -26,6 +26,8 @@ export function PhotoReviewGrid({
   error: boolean;
   onReview: (submissionId: string, decision: Decision) => void;
   onOpen: (row: LiveSubmission) => void;
+  /** A picture failed to load (e.g. its signed URL expired): the caller fetches a fresh one. */
+  onPhotoError?: (row: LiveSubmission) => void;
 }) {
   const all = rows ?? [];
   const count = (f: Filter) => (f === "all" ? all.length : all.filter((r) => r.status === f).length);
@@ -97,7 +99,7 @@ export function PhotoReviewGrid({
                 className="relative block aspect-square w-full bg-black focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-ring">
                 {r.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.photoUrl} alt={`Photo from ${r.nickname}`} loading="lazy" className="size-full object-cover" />
+                  <img onError={() => onPhotoError?.(r)} src={r.photoUrl} alt={`Photo from ${r.nickname}`} loading="lazy" className="size-full object-cover" />
                 ) : <span className="grid size-full place-items-center text-xs text-white/70">no photo</span>}
                 <span className="absolute left-1.5 top-1.5 rounded-lg bg-brand-night/80 px-2 py-0.5 font-display text-sm font-bold text-white">#{r.rank}</span>
                 {r.isLeader ? <span className="absolute right-1.5 top-1.5"><Badge variant="default"><Crown aria-hidden="true" className="size-3" /> Would win</Badge></span> : null}

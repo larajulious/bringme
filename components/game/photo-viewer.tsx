@@ -15,7 +15,7 @@ import { formatElapsed } from "@/lib/game/timing";
  * side so the Game Master can decide from the photos, not from milliseconds.
  */
 export function PhotoViewer({
-  row, rows, locked, busy, prompt, onClose, onReview, onNavigate,
+  row, rows, locked, busy, prompt, onClose, onReview, onNavigate, onPhotoError,
 }: {
   row: LiveSubmission | null;
   rows: LiveSubmission[];
@@ -23,6 +23,8 @@ export function PhotoViewer({
   busy: boolean;
   prompt: string | null;
   onClose: () => void;
+  /** A picture failed to load (e.g. its signed URL expired): the caller fetches a fresh one. */
+  onPhotoError?: (row: LiveSubmission) => void;
   onReview: (id: string, d: Decision) => void;
   onNavigate: (r: LiveSubmission) => void;
 }) {
@@ -56,7 +58,7 @@ export function PhotoViewer({
               <figure key={r.submissionId} className="grid gap-2">
                 {r.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.photoUrl} alt={`Photo from ${r.nickname}`} className="max-h-[60vh] w-full rounded-2xl bg-black object-contain" />
+                  <img onError={() => onPhotoError?.(r)} src={r.photoUrl} alt={`Photo from ${r.nickname}`} className="max-h-[60vh] w-full rounded-2xl bg-black object-contain" />
                 ) : <div className="grid h-48 place-items-center rounded-2xl bg-muted">No photo</div>}
                 <figcaption className="flex flex-wrap items-center gap-2">
                   <strong className="font-display text-lg">{r.nickname}</strong>

@@ -12,13 +12,13 @@ import { rosterKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { ProjectorStage } from "@/components/game/projector-stage";
 import { TrophyIllustration } from "@/components/game/trophy";
 import { useGameSync, type Conn } from "@/components/game/use-game-sync";
+import { useSubmissionRows } from "@/components/game/use-submission-rows";
 import { Button } from "@/components/ui/button";
 import { formatElapsed } from "@/lib/game/timing";
 import type { HostSnapshot } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
 
 type Player = { id: string; nickname: string };
-type Row = { nickname: string; playerId: string; photoUrl: string | null };
 
 export const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Live", basic: "Live (basic)", reconnecting: "Reconnecting…", offline: "Offline" };
 const IDLE_MS = 2_500;
@@ -34,7 +34,6 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
 }) {
   const { state: s, conn, offsetMs } = useGameSync<HostSnapshot>({ gameId, role: "host", initial, fetchSnapshot: () => fetchHostSnapshot(gameId) });
   const [players, setPlayers] = useState(initialPlayers);
-  const [rows, setRows] = useState<Row[]>([]);
   const [photos, setPhotos] = useState<{ no: number; photoUrl: string | null }[]>([]);
   const chrome = useChrome();
 
@@ -47,17 +46,9 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
   }, [gameId, rosterDep]);
 
   // During a round: who has submitted (names only on screen) and, once official, the winner's photo.
+  // The presenter view never receives any other photo URL (Phase 3: a public screen holds no review photos).
   const inRound = (s.phase === "active" || s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(s.round);
-  const rowsDep = submissionsKey(s);
-  useEffect(() => {
-    if (!inRound) { setRows([]); return; }
-    let live = true;
-    fetch(`/api/host/games/${gameId}/submissions`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("failed"))))
-      .then((d: { submissions: Row[] }) => { if (live) setRows(d.submissions); })
-      .catch(() => undefined);
-    return () => { live = false; };
-  }, [gameId, inRound, rowsDep]);
+  const rows = useSubmissionRows(gameId, { view: "presenter", enabled: inRound, dep: submissionsKey(s) }).rows ?? [];
 
   useEffect(() => {
     if (s.status !== "finished") return;

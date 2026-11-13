@@ -15,6 +15,8 @@ export type LiveSubmission = ReviewRow & {
   serverMs: number;
   flags: string[];
   photoUrl: string | null;
+  /** Cache identity of the photo (bucket/path), from the listing (Phase 3). */
+  photoKey?: string | null;
 };
 
 export type Decision = "approve" | "disqualify" | "reset";

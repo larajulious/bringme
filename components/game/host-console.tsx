@@ -1,16 +1,17 @@
 "use client";
 
 import { Camera, ChevronDown, Flag, Hourglass, MonitorPlay, Play, Plus, RotateCcw, Square, Trophy, Users } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
 import { fetchHostSnapshot, fetchRoster, fetchRounds, replayRound, runSteps } from "@/components/game/host-api";
 import { rosterKey, roundsKey, submissionsKey } from "@/lib/game/refresh-keys";
+import { useSubmissionRows } from "@/components/game/use-submission-rows";
 import { ItemPrivacyToggle, ItemText, useItemPrivacy } from "@/components/game/item-privacy";
 import { PhotoReviewGrid } from "@/components/game/photo-review-grid";
 import { PhotoViewer } from "@/components/game/photo-viewer";
 import { bringMeOnScreen } from "@/components/game/on-screen-now";
-import { type Decision, type LiveSubmission } from "@/components/game/review-panel";
+import { type Decision } from "@/components/game/review-panel";
 import { useGameSync, useNow, type Conn } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,6 @@ const errorCopy: Record<string, string> = {
 };
 const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Live", basic: "Live (basic mode)", reconnecting: "Reconnecting…", offline: "Offline" };
 
-type Row = LiveSubmission;
 
 type RoundRow = { round_no: number; prompt: string; status: string };
 
@@ -71,8 +71,6 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
   const [confirmStop, setConfirmStop] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [players, setPlayers] = useState(initialPlayers);
-  const [rows, setRows] = useState<Row[] | null>(null);
-  const [rowsError, setRowsError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
   const [roundList, setRoundList] = useState<RoundRow[]>(initialRounds);
@@ -95,24 +93,10 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
     return () => { live = false; };
   }, [gameId, roundsDep]);
 
-  // Live submissions: a new photo, a review decision, a removal, or the round/phase/winner changed.
-  const reqId = useRef(0);
+  // Live submissions: re-read when a photo, a review decision, a removal, or the round/phase/winner changed.
+  // Photos already on screen keep their signed URL; new or expiring ones are signed (Phase 3).
   const wantRows = (s.phase === "active" || s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(s.round);
-  const loadRows = useCallback(async () => {
-    const id = ++reqId.current;
-    try {
-      const res = await fetch(`/api/host/games/${gameId}/submissions`, { cache: "no-store" });
-      if (!res.ok) throw new Error("failed");
-      const data = (await res.json()) as { submissions: Row[] };
-      if (id === reqId.current) { setRows(data.submissions); setRowsError(false); } // never let an older response overwrite a newer one
-    } catch {
-      if (id === reqId.current) setRowsError(true);
-    }
-  }, [gameId]);
-  const rowsDep = submissionsKey(s);
-  useEffect(() => {
-    if (wantRows) void loadRows(); else { setRows(null); }
-  }, [wantRows, rowsDep, loadRows]);
+  const { rows, error: rowsError, reload: loadRows, photoFailed } = useSubmissionRows(gameId, { view: "host", enabled: wantRows, dep: submissionsKey(s) });
 
   /** One host step = one or more server actions in a row. `quiet`: automatic steps don't toast (another tab may have done it). */
   const send = async (step: HostAction | HostAction[], winner?: string | null, quiet = false) => {
@@ -166,8 +150,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
     if (res?.ok) {
       const { state } = (await res.json()) as { state: HostSnapshot };
       if (decision !== "reset") advanceFrom.current = submissionId; // move the viewer on once the list shows it
-      applyState(state);
-      void loadRows();
+      applyState(state); // the new state's submissions fingerprint re-reads the list
       return;
     }
     const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : "network";
@@ -284,7 +267,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
     const winnerId = confirmation.kind === "winner" ? confirmation.leader.playerId : null;
     const ok = await send("announce_winner", winnerId);
     setConfirmWinner(false);
-    if (ok) void loadRows();
+    void ok; // the applied state re-reads the list (fingerprint changed)
   };
 
   return (
@@ -376,7 +359,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
           ) : <Button variant="outline" className={FOOT} onClick={() => setShowPhotos(false)}>Close</Button>
         }
       >
-        <PhotoReviewGrid rows={rows} locked={locked} busyId={busyId} error={rowsError} onReview={review} onOpen={(x) => setViewing(x.submissionId)} />
+        <PhotoReviewGrid rows={rows} locked={locked} busyId={busyId} error={rowsError} onReview={review} onOpen={(x) => setViewing(x.submissionId)} onPhotoError={photoFailed} />
       </Modal>
 
       <div className="grid gap-3">
@@ -409,7 +392,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
         </div>
       </div>
 
-      <PhotoViewer row={viewingRow} rows={rows ?? []} locked={locked} busy={busyId !== null} prompt={itemHidden ? null : r?.prompt ?? null} onClose={() => setViewing(null)} onReview={review} onNavigate={(x) => setViewing(x.submissionId)} />
+      <PhotoViewer row={viewingRow} rows={rows ?? []} locked={locked} busy={busyId !== null} prompt={itemHidden ? null : r?.prompt ?? null} onClose={() => setViewing(null)} onReview={review} onNavigate={(x) => setViewing(x.submissionId)} onPhotoError={photoFailed} />
 
       <Modal
         open={confirmWinner} onClose={() => setConfirmWinner(false)}
@@ -429,7 +412,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
             <div className="flex min-w-0 items-center gap-3 rounded-2xl bg-brand-yellow/25 p-3">
               {rows?.find((x) => x.playerId === confirmation.leader.playerId)?.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={rows.find((x) => x.playerId === confirmation.leader.playerId)!.photoUrl!} alt={`Photo from ${confirmation.leader.nickname}`} className="size-20 rounded-xl bg-black object-cover" />
+                <img src={rows.find((x) => x.playerId === confirmation.leader.playerId)!.photoUrl!} alt={`Photo from ${confirmation.leader.nickname}`} className="size-20 rounded-xl bg-black object-cover" onError={() => photoFailed(rows.find((x) => x.playerId === confirmation.leader.playerId)!)} />
               ) : null}
               <div className="min-w-0">
                 <p className="break-words font-display text-2xl font-bold text-primary">{confirmation.leader.nickname}</p>
