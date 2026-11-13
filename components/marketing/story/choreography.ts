@@ -18,7 +18,9 @@ import { POSES, REF_H, cycleLength, mix, runPose, withFace, type Face, type Kind
  *  3.1–4.4  The moment    He brakes hard, turns and charges toward us, growing to full size, frames the
  *                         shot and fires his flash: a held beat.
  *  4.4–5.0  The finish    He throws both arms up and holds, breathing, above the footer.
- *                         (Phones: no clear space above the footer, so he celebrates and runs off.)
+ *
+ * Phones don't get the run (no lane on a phone stays clear of the content). Instead, once the visitor
+ * reaches the end, Snappy sneaks up from behind the footer's torn edge: see `sneak`.
  * ---------------------------------------------------------------------------------------------- */
 
 export type Layout = { vw: number; vh: number; mobile: boolean; /** ground line that clears the footer at the end */ gEnd: number };
@@ -67,14 +69,12 @@ function parts(base: Seg, cuts: { to: number; face?: Face }[]): Seg[] {
 
 /* ------------------------------------------- the script ------------------------------------------- */
 
+/** The run through the page (tablet and desktop; phones get the sneak at the end instead, see `sneak`). */
 function script(l: Layout): Record<Kind, Seg[]> {
-  const m = l.mobile;
-  const near = m ? 0.9 : l.gEnd; // the stage floor for the moment and the finish
-  const far = near - (m ? 0.08 : 0.12); // a plane further back (higher on screen, smaller)
-  const H = { hero: m ? 0.2 : 0.44, run: m ? 0.17 : 0.26, far: m ? 0.13 : 0.19, a: m ? 0.2 : 0.31 };
-  const X = m
-    ? { edge: [1.02, 0.9], launch: 0.6, out: -0.35, aIn: -0.25, aRun: 0.42, aBrake: 0.5, aEnd: 0.26 }
-    : { edge: [1.04, 0.965], launch: 0.42, out: -0.2, aIn: -0.14, aRun: 0.5, aBrake: 0.565, aEnd: 0.115 };
+  const near = l.gEnd; // the stage floor for the moment and the finish
+  const far = near - 0.12; // a plane further back (higher on screen, smaller)
+  const H = { hero: 0.44, run: 0.26, far: 0.19, a: 0.31 };
+  const X = { edge: [1.04, 0.965], launch: 0.42, out: -0.2, aIn: -0.14, aRun: 0.5, aBrake: 0.565, aEnd: 0.115 };
   const at = (x: number, g: number, h: number, z: number, f: number) => ({ x: hold(x), g: hold(g), h: hold(h), z: hold(z), f: hold(f) });
   const A = at(X.aEnd, near, H.a, 1, 1);
 
@@ -98,12 +98,7 @@ function script(l: Layout): Record<Kind, Seg[]> {
     { t: [4.15, 4.3], pose: ["snap", "snap"], ...A, face: { flash: 1, lid: 0.55, smile: 0.9 } }, // click
     { t: [4.3, 4.4], pose: ["snap", "snap"], ...A }, // the held beat
     { t: [4.4, 4.6], pose: ["snap", "victory"], ...A, ease: "inout" },
-    ...(m
-      ? ([
-          { t: [4.6, 4.72], pose: ["victory", "victory"], ...A },
-          { t: [4.72, 5], run: { lean: [22, 16], phase0: 0.8 }, blend: 0.3, ...A, x: [X.aEnd, 1.4], ease: "in" },
-        ] satisfies Seg[])
-      : ([{ t: [4.6, 5], pose: ["victory", "victory"], ...A }] satisfies Seg[])),
+    { t: [4.6, 5], pose: ["victory", "victory"], ...A },
   ];
 
   return { a };
@@ -192,6 +187,51 @@ export function place(tr: Track, tau: number, l: Layout, time: number, still = f
     depth: lerp(s.z, e),
     pose,
   };
+}
+
+/* ---------------------------------------------- phones: the sneak ---------------------------------------------- */
+
+/** Eased keyframes: value at time t through [time, value] pairs (smoothstep between, held outside). */
+function keys(t: number, k: [number, number][]) {
+  if (t <= k[0][0]) return k[0][1];
+  for (let i = 1; i < k.length; i++) {
+    if (t <= k[i][0]) return k[i - 1][1] + (k[i][1] - k[i - 1][1]) * smooth((t - k[i - 1][0]) / (k[i][0] - k[i - 1][0]));
+  }
+  return k[k.length - 1][1];
+}
+/** When the sneak is fully played (seconds); the reduced-motion still uses this frame. */
+export const SNEAK_END = 2.6;
+
+/**
+ * Phones, end of the page: Snappy peeks over the footer's torn edge. `t` = seconds since the visitor reached the
+ * end (played backwards, faster, when they scroll away), `edge` = the footer's top in viewport px; the footer
+ * itself hides everything below the edge. Beats: the camera bump rises, then a sly eye that darts left and right;
+ * he rises a little more and grins at us; the stapler pops up over the edge with a wink; then he idles, glancing
+ * about.
+ */
+export function sneak(t: number, l: Layout, edge: number, time: number, still = false): Placement {
+  const scale = Math.min(0.19 * l.vh, 170) / REF_H; // fits the room left for him above the footer
+  const peek = keys(t, [[0, 0], [0.45, 0.3], [1.05, 0.3], [1.45, 0.64]]); // share of his height above the edge
+  const idle = still || t < SNEAK_END ? 0 : time - SNEAK_END;
+  const glance = idle ? 0.55 * Math.sin(idle * 0.8) + 0.25 * Math.sin(idle * 2.1) : 0;
+  let pose: Pose = {
+    ...POSES.stand,
+    look: keys(t, [[0, -1], [0.55, -1], [0.7, 1], [0.95, 1], [1.05, -0.4], [1.4, 0]]) + glance,
+    lookY: keys(t, [[0, -0.3], [1.3, -0.3], [1.5, 0.1]]),
+    lid: Math.max(keys(t, [[0, 0.3], [1.2, 0.3], [1.45, 0]]), keys(t, [[1.95, 0], [2.05, 1], [2.3, 1], [2.45, 0]])), // sly squint, then a wink
+    smile: keys(t, [[0, 0.35], [1.3, 0.35], [1.5, 1]]),
+    open: keys(t, [[1.3, 0], [1.55, 0.55]]),
+    smirk: keys(t, [[0, 0.7], [1.3, 0.7], [1.5, 0]]),
+    // stapler arm pops up over the edge; the other arm stays down behind the footer
+    shF: keys(t, [[1.5, 10], [1.85, 155]]), elF: keys(t, [[1.5, 30], [1.85, 18]]),
+    sq: keys(t, [[1.45, 0], [1.6, -0.5], [1.8, 0]]), // a little stretch as he pops up
+  };
+  if (!still) {
+    const b = Math.sin(time * 1.9);
+    pose = { ...pose, sq: pose.sq + 0.25 * b, lid: Math.max(pose.lid, blink(time)) };
+  }
+  const height = REF_H * scale;
+  return { kind: "a", x: 0.8 * l.vw, y: edge + (1 - peek) * height + 0.04 * height, scale, facing: -1, depth: 1, pose };
 }
 
 /** The frame each section shows when nothing moves (reduced motion): one telling moment per section, or none where a

@@ -1,4 +1,4 @@
-import { buildTracks, place, stillTau, type Layout, type Track } from "./choreography";
+import { SNEAK_END, buildTracks, place, sneak, stillTau, type Layout, type Track } from "./choreography";
 import { apply, buildRig, extent, type Placement, type Rig } from "./rig";
 
 /* ------------------------------------------------------------------------------------------------
@@ -53,6 +53,10 @@ export function startStory(): () => void {
   /** Section headings + their intro line (document px): the cast ghosts while it passes behind them. */
   let avoid: { l: number; t: number; r: number; b: number }[] = [];
   const fade = [1];
+  /** Phones: the footer's top (document px), the last scroll position, and the sneak clock (seconds). */
+  let footerTop = 0;
+  let maxScroll = 1;
+  let sneakT = 0;
 
   function measure() {
     const vw = document.documentElement.clientWidth;
@@ -63,9 +67,14 @@ export function startStory(): () => void {
       s.el.style.setProperty("--vh", `${vh}px`);
       s.svg.setAttribute("viewBox", `0 0 ${vw} ${vh}`);
     }
-    const footer = document.querySelector("footer")?.getBoundingClientRect().height ?? 0;
+    const footerBox = document.querySelector("footer")?.getBoundingClientRect();
+    const footer = footerBox?.height ?? 0;
+    footerTop = (footerBox?.top ?? 0) + y;
+    maxScroll = Math.max(1, document.documentElement.scrollHeight - vh);
     const mobile = vw < 768;
     layout = { vw, vh, mobile, gEnd: Math.min(0.97, Math.max(0.6, 1 - (footer + (mobile ? 10 : 18)) / vh)) };
+    // phones: no run through the page; Snappy only appears at the end, peeking over the footer (pricing stage)
+    for (const st of stages) for (const r of st.rigs) r.root.style.display = mobile && st.name !== "pricing" ? "none" : "";
     tracks = buildTracks(layout);
     avoid = [...document.querySelectorAll("main h2")].flatMap((h) => [h, h.nextElementSibling?.tagName === "P" ? h.nextElementSibling : null])
       .filter((e): e is Element => !!e)
@@ -124,6 +133,12 @@ export function startStory(): () => void {
   /* --------------------------------------- still (reduced motion) --------------------------------------- */
 
   function renderStill() {
+    if (layout.mobile) {
+      // the pricing window sits at the bottom of its section, i.e. on the footer's edge
+      const pricing = stages.find((st) => st.name === "pricing");
+      if (pricing) draw(pricing, [sneak(SNEAK_END, layout, layout.vh, 0, true)]);
+      return;
+    }
     for (const s of stages) {
       const tau = stillTau(s.name, layout);
       const places = tracks.map((t) => place(t, tau, layout, 0, true));
@@ -147,10 +162,16 @@ export function startStory(): () => void {
     const y = window.scrollY;
     cur += (y - cur) * (1 - Math.exp(-dt / 0.09));
     if (Math.abs(y - cur) < 0.3) cur = y;
-    const tau = tauAt(cur);
     const time = now / 1000;
-    const places = tracks.map((t) => place(t, tau, layout, time));
-    clearOfText(places, y, dt);
+    let places: Placement[];
+    if (layout.mobile) {
+      // the sneak plays forward while the visitor is at the end, and rewinds (faster) when they scroll away
+      sneakT = y >= maxScroll - 40 ? Math.min(sneakT + dt, 600) : Math.max(0, sneakT - dt * 3);
+      places = [sneak(sneakT, layout, footerTop - y, time)];
+    } else {
+      places = tracks.map((t) => place(t, tauAt(cur), layout, time));
+      clearOfText(places, y, dt);
+    }
     let any = false;
     for (const s of stages) {
       if (!s.on) continue;
@@ -186,9 +207,11 @@ export function startStory(): () => void {
   for (const s of stages) s.el.dataset.mode = still ? "still" : "live";
   if (still) renderStill();
   else {
-    const tau = tauAt(cur);
-    const places = tracks.map((t) => place(t, tau, layout, performance.now() / 1000));
-    clearOfText(places, window.scrollY, null);
+    const y0 = window.scrollY;
+    const places = layout.mobile
+      ? [sneak(0, layout, footerTop - y0, performance.now() / 1000)]
+      : tracks.map((t) => place(t, tauAt(cur), layout, performance.now() / 1000));
+    if (!layout.mobile) clearOfText(places, y0, null);
     for (const s of stages) draw(s, places);
     for (const s of stages) io.observe(s.el);
   }

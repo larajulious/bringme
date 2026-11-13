@@ -14,8 +14,9 @@ const FAQ = [
 ];
 
 export function PricingSection({ children }: { children: React.ReactNode }) {
+  // phones (below md, matching the story engine): extra room at the bottom for Snappy peeking over the footer
   return (
-    <section id="pricing" aria-labelledby="pricing-heading" className="flex min-h-svh scroll-mt-6 flex-col justify-center px-5 py-[clamp(2.5rem,6svh,5rem)]">
+    <section id="pricing" aria-labelledby="pricing-heading" className="flex min-h-svh scroll-mt-6 flex-col justify-center px-5 pb-[10rem] pt-[clamp(2.5rem,6svh,5rem)] md:pb-[clamp(2.5rem,6svh,5rem)]">
       <Reveal className="relative isolate mx-auto w-full max-w-6xl">
         <h2 id="pricing-heading" className="mb-3 text-center text-3xl font-bold text-primary sm:text-4xl lg:text-5xl">Simple pricing, per event</h2>
         <p className="mx-auto mb-[clamp(1.25rem,4svh,2.5rem)] max-w-xl text-center text-muted-foreground lg:text-lg">Pay once, host for 7 days. No subscriptions to forget about — Snappy hates those too.</p>

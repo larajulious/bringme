@@ -1,6 +1,6 @@
 # BringMe! — Project Status
 
-_Last updated: 2026-11-13 (Homepage scroll story: Snappy runs solo; homepage header centred on phones. Earlier: BingoSnap Phase 10: polish; Phase 9: host validation dashboard; Phase 8: server-enforced timer + reliable submissions; Phase 7: completion engine + Submit; Phase 6: local photo capture, browser-only; BingoSnap migrations 17–21 not yet applied to the hosted DB. Earlier: Passwordless Email OTP sign-in replaces password login/sign-up; browser-checked with stubbed Supabase, **not yet run against the hosted project or a real inbox**. Earlier: admin plan edits synchronise to Polar (migration 14), not run against the Polar sandbox. **Not launch-ready**: see GAME_PASS_QA_REPORT.md blockers.)_
+_Last updated: 2026-11-13 (Homepage scroll story: Snappy runs solo on desktop and sneaks over the footer on phones; homepage header centred on phones. Earlier: BingoSnap Phase 10: polish; Phase 9: host validation dashboard; Phase 8: server-enforced timer + reliable submissions; Phase 7: completion engine + Submit; Phase 6: local photo capture, browser-only; BingoSnap migrations 17–21 not yet applied to the hosted DB. Earlier: Passwordless Email OTP sign-in replaces password login/sign-up; browser-checked with stubbed Supabase, **not yet run against the hosted project or a real inbox**. Earlier: admin plan edits synchronise to Polar (migration 14), not run against the Polar sandbox. **Not launch-ready**: see GAME_PASS_QA_REPORT.md blockers.)_
 
 ## Product
 Real-time party game with three roles: **Super Admin** (platform owner), **Subscriber / Game Master** (hosts games), **Player** (joins via QR, no registration).
@@ -15,6 +15,11 @@ Real-time party game with three roles: **Super Admin** (platform owner), **Subsc
 - **Routes**: `/` landing, `/play` (public player placeholder), `/auth/{login,error}` (login = unified passwordless email-code page; old sign-up/forgot/update-password URLs redirect to it) + route handlers `/auth/confirm` (email links) and `/auth/continue` (server-side role router), `/dashboard`, `/dashboard/games/new`, `/dashboard/games/[id]` (lobby), `/dashboard/subscription` (Game Master), `/play` (public room-code entry), `/join/[code]` (QR landing + name form), `/join/[code]/lobby` (player waiting lobby), `/play/[code]` (redirects to `/join/[code]`), `/admin/login` (public) and the Super Admin console: `/admin/dashboard`, `/admin/subscribers`, `/admin/subscribers/[id]`, `/admin/plans`, `/admin/settings` (`/admin` redirects). `loading.tsx`/`error.tsx` at root and per area; `not-found.tsx`.
 
 ## Homepage: scroll story with Snappy runners (2026-11-13)
+- **Update (same day): phones get a sneak instead of the run.** Below `md` (768px) Snappy no longer runs through the page; the other stages draw nothing. When the visitor reaches the very end, he sneaks up from behind the footer's torn edge:
+  - the camera bump appears first, then a sly, squinting eye darting left and right;
+  - he rises and grins, pops the red stapler over the edge and winks, then idles, glancing about and blinking;
+  - scrolling away rewinds it (3× faster), so he ducks back out of sight.
+  - Implementation: time-based, since nothing scrolls at the end (`sneak()` in choreography.ts; the engine anchors him to the footer's top edge, and the footer hides his lower body). Pricing gets `pb-[10rem]` below `md` to leave him room; `md:` and up keep the old padding. Reduced motion: a still of the final peek.
 - **Update (same day): restyled to the approved running-Snappy reference.**
   - Slight 3/4 view: a darker side face shows on the leading side and the face sits toward travel.
   - Lens a touch smaller and higher, making room for a big open grin with a coral tongue.
