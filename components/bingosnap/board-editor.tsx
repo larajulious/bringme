@@ -474,7 +474,7 @@ export function BoardEditor({ initial, maxPlayers }: { initial?: EditorInitial; 
               <legend className="mb-2 font-semibold">Timer</legend>
               <div className="grid grid-cols-4 gap-2">
                 {DURATION_PRESETS_MIN.map((m) => (
-                  <label key={m} className="block cursor-pointer">
+                  <label key={m} className="relative block cursor-pointer">
                     <input type="radio" name="duration" value={m} checked={d.minutes === m && minutesText === String(m)} onChange={() => pickMinutes(m)} className="peer sr-only" />
                     <span className="flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border-2 border-primary/15 bg-card px-2 font-display text-sm font-semibold text-primary transition-colors hover:border-primary/40 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-4 peer-focus-visible:ring-ring/40">
                       {formatMinutes(m)}
