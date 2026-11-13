@@ -4,23 +4,23 @@ import { createClient as createPlainClient, type RealtimeChannel, type SupabaseC
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ClockSync } from "@/lib/game/clock";
-import { GameSyncCore, clockOffset, type FetchResult } from "@/lib/game/sync";
+import { GameSyncCore, clockOffset, combineRealtime, fallbackPlan, guestRoute, routeEverything, type FetchResult, type RtStatus } from "@/lib/game/sync";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
 export type Conn = "connecting" | "live" | "basic" | "reconnecting" | "offline";
 
-const SAFETY_RESYNC_MS = 30_000; // Broadcast is at-most-once: a slow consistency check, not polling
-const FALLBACK_POLL_MS = 4_000; // only while Realtime is unavailable
-const FALLBACK_GRACE_MS = 6_000;
+/** Players spread their re-reads after a join hint over 1–2.5 s (the headcount stays fresh, joins don't stampede). */
+const ROSTER_DEBOUNCE = { baseMs: 1_000, jitterMs: 1_500 };
 
 type Snap = { version: number; serverNow: string; countdownEndsAt: string | null; round?: { openedAt: string | null } | null };
 
 /**
  * Keeps one game's authoritative state in sync on this device.
- *  - Realtime Broadcast (private channel) delivers "something changed" hints.
- *  - Every hint, reconnect, tab focus and timer boundary triggers a re-read of
- *    the authoritative snapshot; stale snapshots are discarded (GameSyncCore).
- *  - If Realtime can't be used, it degrades to a slow poll and says so ("basic").
+ *  - Realtime Broadcast (private channels) delivers "something changed" hints with an audience
+ *    scope. Hosts also listen to the owner-only `game:<id>:host` topic (photos, reviews, claims).
+ *  - Hints for this client, reconnects, tab focus and timer boundaries trigger a re-read of the
+ *    authoritative snapshot; stale snapshots are discarded (GameSyncCore).
+ *  - If Realtime can't be used (either topic, for a host), it degrades to a slow poll and says so ("basic").
  */
 export function useGameSync<S extends Snap>(opts: {
   gameId: string;
@@ -31,11 +31,18 @@ export function useGameSync<S extends Snap>(opts: {
   tokenUrl?: string;
   /** A server deadline read from the current state (e.g. BingoSnap's hunt end): re-read right after it, and again after the 2 s claim grace. */
   deadlineOf?: (s: S) => string | null;
+  /** Guests only: does a claim review concern this player (BingoSnap: they hold a claim)? Without it such hints are skipped. */
+  claimsRelevant?: (s: S) => boolean;
 }) {
   const { gameId, role } = opts;
   const tokenUrl = opts.tokenUrl ?? "/api/play/realtime-token";
   const [state, setState] = useState<S>(opts.initial);
-  const [rt, setRt] = useState<"connecting" | "subscribed" | "down">("connecting");
+  const [mainRt, setRt] = useState<RtStatus>("connecting");
+  /** Hosts only: the owner-only topic. Guests never join it. */
+  const [hostRt, setHostRt] = useState<RtStatus>("connecting");
+  const rt = combineRealtime(mainRt, role === "host" ? hostRt : undefined);
+  const claimsRef = useRef(opts.claimsRelevant);
+  claimsRef.current = opts.claimsRelevant;
   const [online, setOnline] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
   const [offsetMs, setOffsetMs] = useState(() => Date.parse(opts.initial.serverNow) - Date.now());
@@ -65,6 +72,9 @@ export function useGameSync<S extends Snap>(opts: {
       },
       onState: (s) => setState(s),
       onUnauthorized: () => setUnauthorized(true),
+      // Hosts (console, presenter) need every change; players only what changes their own screen.
+      route: role === "host" ? routeEverything : guestRoute<S>((s) => claimsRef.current?.(s) ?? false),
+      debounce: ROSTER_DEBOUNCE,
     });
     core.current = c;
     void c.resync(); // the server-rendered snapshot may already be a little old
@@ -91,6 +101,7 @@ export function useGameSync<S extends Snap>(opts: {
     let cancelled = false;
     let client: SupabaseClient | null = null;
     let channel: RealtimeChannel | null = null;
+    let hostChannel: RealtimeChannel | null = null;
     let refresh: ReturnType<typeof setTimeout> | undefined;
 
     const start = async () => {
@@ -124,28 +135,40 @@ export function useGameSync<S extends Snap>(opts: {
           if (data.session) client.realtime.setAuth(data.session.access_token);
         }
         if (cancelled || !client) return;
-        channel = client.channel(`game:${gameId}`, { config: { private: true } });
-        channel.on("broadcast", { event: "state" }, (msg) => core.current?.handleSignal(msg.payload));
-        channel.subscribe((status) => {
-          if (cancelled) return;
-          if (status === "SUBSCRIBED") {
-            setRt("subscribed");
-            resync(); // first connect AND every reconnect: catch up on whatever we missed
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-            setRt("down");
-          }
-        });
+        const watch = (topic: string, source: "game" | "host", set: (s: RtStatus) => void) => {
+          const ch = client!.channel(topic, { config: { private: true } });
+          ch.on("broadcast", { event: "state" }, (msg) => core.current?.handleSignal(msg.payload, source));
+          ch.subscribe((status) => {
+            if (cancelled) return;
+            if (status === "SUBSCRIBED") {
+              set("subscribed");
+              resync(); // first connect AND every reconnect: catch up on whatever we missed
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+              set("down");
+            }
+          });
+          return ch;
+        };
+        channel = watch(`game:${gameId}`, "game", setRt);
+        // Same socket, second channel: host-only hints (an older database refuses it -> "basic" polling, still correct).
+        if (role === "host") hostChannel = watch(`game:${gameId}:host`, "host", setHostRt);
       } catch {
-        if (!cancelled) setRt("down");
+        if (!cancelled) { setRt("down"); setHostRt("down"); }
       }
     };
     void start();
     return () => {
       cancelled = true;
       clearTimeout(refresh);
+      if (hostChannel) void client?.removeChannel(hostChannel);
       if (channel) void client?.removeChannel(channel);
     };
   }, [gameId, role, resync, tokenUrl]);
+
+  // Make a degraded connection visible to whoever debugs a device (the UI shows "basic mode").
+  useEffect(() => {
+    if (rt === "down") console.warn("[sync] Realtime unavailable for this game; re-reading every 4 s until it is back");
+  }, [rt]);
 
   // ---- network / visibility
   useEffect(() => {
@@ -168,12 +191,9 @@ export function useGameSync<S extends Snap>(opts: {
   // ---- slow safety net while subscribed; slow polling only while Realtime is unavailable
   useEffect(() => {
     const visibleResync = () => { if (document.visibilityState === "visible") resync(); };
-    if (rt === "subscribed") {
-      const id = setInterval(visibleResync, SAFETY_RESYNC_MS);
-      return () => clearInterval(id);
-    }
+    const { everyMs, startAfterMs } = fallbackPlan(rt);
     let id: ReturnType<typeof setInterval> | undefined;
-    const grace = setTimeout(() => { id = setInterval(visibleResync, FALLBACK_POLL_MS); }, rt === "down" ? 0 : FALLBACK_GRACE_MS);
+    const grace = setTimeout(() => { id = setInterval(visibleResync, everyMs); }, startAfterMs);
     return () => { clearTimeout(grace); clearInterval(id); };
   }, [rt, resync]);
 

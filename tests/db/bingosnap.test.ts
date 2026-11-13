@@ -259,7 +259,7 @@ describe("lifecycle & timer", () => {
     assert.ok(Number((await db.query<{ n: string }>("select count(*)::text n from realtime.messages where topic=$1", [`game:${g.id}`])).rows[0].n) > Number(before));
     const msg = (await db.query<{ p: { version: number } }>("select payload p from realtime.messages where topic=$1 order by id desc limit 1", [`game:${g.id}`])).rows[0].p;
     assert.equal(msg.version, await ver(g.id));
-    assert.deepEqual(Object.keys(msg).sort(), ["phase", "version"], "broadcast carries no content");
+    assert.deepEqual(Object.keys(msg).sort(), ["phase", "scope", "version"], "broadcast carries no content");
   });
 
   it("an expired pass blocks starting, but a hunt already live can finish (D-10)", async () => {

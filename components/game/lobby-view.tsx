@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { fetchHostSnapshot, fetchRoster, runSteps } from "@/components/game/host-api";
+import { rosterKey } from "@/lib/game/refresh-keys";
 import { ItemPrivacyToggle, ItemText, useItemPrivacy } from "@/components/game/item-privacy";
 import { OnScreenNow, bringMeOnScreen } from "@/components/game/on-screen-now";
 import { useGameSync } from "@/components/game/use-game-sync";
@@ -30,7 +31,7 @@ const apiErrors: Record<string, string> = {
 /**
  * Lobby for projecting on a big screen. `qr` is a server-rendered SVG passed in
  * as a child, so no QR code logic ships to the browser.
- * Player list refreshes by polling the server every few seconds (Realtime comes later).
+ * The player list is re-read when the roster fingerprint changes (a join or a removal), via Realtime hints.
  */
 export function LobbyView({
   gameId, code, joinUrl, maxPlayers, roundCount, items, players: initialPlayers, siteUrlConfigured, initialState,
@@ -49,11 +50,12 @@ export function LobbyView({
   });
   const [players, setPlayers] = useState(initialPlayers);
   const [itemsHidden, toggleItems] = useItemPrivacy();
+  const rosterDep = rosterKey(state);
   useEffect(() => {
     let live = true;
     void fetchRoster(gameId).then((r) => { if (live && r) setPlayers(r); });
     return () => { live = false; };
-  }, [gameId, state.version]);
+  }, [gameId, rosterDep]);
   // The game moved on (started in another tab, cancelled): let the server pick the right screen.
   useEffect(() => {
     if (state.status !== "lobby") router.refresh();

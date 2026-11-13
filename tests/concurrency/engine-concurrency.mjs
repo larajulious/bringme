@@ -231,8 +231,10 @@ async function begunRound(n) {
   return { ...g, atts };
 }
 
+const lastMsg = async () => Number((await admin.query("select coalesce(max(id),0)::int m from realtime.messages")).rows[0].m);
+const hintsSince = async (gameId, since) => (await admin.query("select topic, payload from realtime.messages where id > $1 and topic in ($2, $3) order by id", [since, `game:${gameId}`, `game:${gameId}:host`])).rows;
 for (const n of [2, 10, 30, 50]) {
-  const g = await begunRound(n); const v0 = await ver(g.id);
+  const g = await begunRound(n); const v0 = await ver(g.id); const m0 = await lastMsg();
   const res = await timedParallel(n, (c, i) => c.query("select public.complete_submission($1,$2,$3,'{}') r", [g.hashes[i], g.round, g.atts[i]]));
   const accepted = res.out.filter((o) => o.status === "fulfilled" && o.value.r.rows[0].r.status === "accepted").length;
   const rows = (await admin.query("select s.claimed_elapsed_ms c, s.server_elapsed_ms sv, s.rank_ms rk, s.timing_status t from public.submissions s where s.round_id=$1 order by s.claimed_elapsed_ms", [g.round])).rows;
@@ -241,6 +243,23 @@ for (const n of [2, 10, 30, 50]) {
   const timingOk = rows.every((r, i) => r.c === 1000 + i * 10 && r.rk === (r.t === "flagged" ? Math.max(r.sv, 0) : Math.max(r.c, 0)));
   check(`${n} DIFFERENT players complete at the same instant: all accepted first try, no deadlock/timeout, ${n} rows, version +${n}, timing kept`,
     accepted === n && res.tally.ok === n && rows.length === n && v1 - v0 === n && timingOk, fmt(res));
+  // Phase 2: every one of those hints is host-only (owner topic), none reaches the players' topic
+  const hs = await hintsSince(g.id, m0);
+  const onHost = hs.filter((h) => h.topic.endsWith(":host") && h.payload.scope === "host").length;
+  const vs = hs.map((h) => h.payload.version);
+  check(`Phase 2: ${n} concurrent photos -> ${n} hints on the host topic, 0 on the players' topic, distinct versions`,
+    onHost === n && hs.length === n && new Set(vs).size === n && Math.max(...vs) === v1, `host=${onHost} total=${hs.length}`);
+}
+
+{ // Phase 2: simultaneous joins -> one 'roster' hint each, distinct versions; capacity still exact
+  const g = await newGame([]); const m0 = await lastMsg();
+  const outs = await Promise.allSettled(Array.from({ length: 30 }, async (_, i) => { const c = await conn(); await asSvc(c);
+    return c.query("select * from public.join_game($1,$2,$3,null)", [g.code, "J" + i, sha("join30-" + i + g.code)]).finally(() => c.end()); }));
+  const hs = await hintsSince(g.game_id, m0);
+  const vs = hs.map((h) => h.payload.version);
+  check("Phase 2: 30 simultaneous joins -> 30 'roster' hints on the players' topic, distinct versions, 30 players",
+    outs.every((o) => o.status === "fulfilled") && hs.length === 30 && hs.every((h) => h.payload.scope === "roster" && !h.topic.endsWith(":host"))
+      && new Set(vs).size === 30 && (await countRows("players", "game_id=$1 and kicked_at is null", [g.game_id])) === 30, `hints=${hs.length}`);
 }
 
 { // realistic mix: half the players finishing, half tapping (begin), all at once
@@ -574,6 +593,9 @@ const paidEffect = (o) => JSON.stringify({ kind: "order_paid", order_id: o.order
   const [q, l] = [await queued, await late]; await cc.end(); await lateConn.end();
   const st = (await admin.query("select s.submitted_at <= b.hunt_ends_at as on_time from public.bingo_submissions s join public.bingo_games b on b.game_id = s.game_id where s.player_id=$1", [C.id])).rows;
   check("BingoSnap: a claim that ARRIVED before the deadline but waited on a lock is accepted (stamped with its arrival)", q === "ok" && st.length === 1 && st[0].on_time, `queued=${q}`);
+  const settleHint = (await admin.query("select topic, payload from realtime.messages where topic in ($1,$2) order by id desc limit 1", [`game:${g.gameId}`, `game:${g.gameId}:host`])).rows[0];
+  check("Phase 2: that claim also moved the expired hunt to review, so its hint goes to EVERYONE (not host-only)",
+    settleHint.topic === `game:${g.gameId}` && settleHint.payload.scope === "all" && settleHint.payload.phase === "reviewing", JSON.stringify(settleHint));
   check("BingoSnap: a claim arriving after the deadline + grace is refused, even if the earlier one is still being processed", /hunt_over|claim_pending/.test(l), l.slice(0, 60)); }
 
 // BingoSnap host review (Phase 9): double taps, two host tabs, undo racing a resubmission.

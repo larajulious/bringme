@@ -8,6 +8,7 @@ import { Logo } from "@/components/brand/logo";
 import { Mascot } from "@/components/brand/mascot";
 import { Confetti } from "@/components/game/confetti";
 import { fetchHostSnapshot, fetchRoster } from "@/components/game/host-api";
+import { rosterKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { ProjectorStage } from "@/components/game/projector-stage";
 import { TrophyIllustration } from "@/components/game/trophy";
 import { useGameSync, type Conn } from "@/components/game/use-game-sync";
@@ -37,15 +38,17 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
   const [photos, setPhotos] = useState<{ no: number; photoUrl: string | null }[]>([]);
   const chrome = useChrome();
 
-  // Roster for the lobby wall (re-read on every state change; joins bump the version).
+  // Roster for the lobby wall: re-read when someone joins or is removed.
+  const rosterDep = rosterKey(s);
   useEffect(() => {
     let live = true;
     void fetchRoster(gameId).then((r) => { if (live && r) setPlayers(r); });
     return () => { live = false; };
-  }, [gameId, s.version]);
+  }, [gameId, rosterDep]);
 
   // During a round: who has submitted (names only on screen) and, once official, the winner's photo.
   const inRound = (s.phase === "active" || s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(s.round);
+  const rowsDep = submissionsKey(s);
   useEffect(() => {
     if (!inRound) { setRows([]); return; }
     let live = true;
@@ -54,7 +57,7 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
       .then((d: { submissions: Row[] }) => { if (live) setRows(d.submissions); })
       .catch(() => undefined);
     return () => { live = false; };
-  }, [gameId, inRound, s.version, s.round?.id]);
+  }, [gameId, inRound, rowsDep]);
 
   useEffect(() => {
     if (s.status !== "finished") return;

@@ -67,6 +67,10 @@ Before 13–26 run [`inspect/game_pass_preflight.sql`](inspect/game_pass_preflig
 
 35. `20261113000001_submission_lock_order.sql` — `begin_submission` / `complete_submission`: lock clauses only (game row `FOR NO KEY UPDATE` in complete; player row `FOR NO KEY UPDATE` in both). Removes the deadlock between players submitting at the same time. Same signatures and grants; re-runnable. Revert: [`rollback/20261113000001_submission_lock_order_revert.sql`](rollback/20261113000001_submission_lock_order_revert.sql) (brings the deadlock back). Requires 10; safe after 30
 
+**Realtime audience** (Phase 2, [BRINGME_PHASE2_REALTIME_OPTIMIZATION.md](../BRINGME_PHASE2_REALTIME_OPTIMIZATION.md)). **Requires 35** (the migration refuses to run without it).
+
+36. `20261113000002_realtime_audience.sql` — every hint carries a `scope` (`all` / `roster` / `claims` / `host`); host-only hints (photo submissions, Bring Me review decisions, BingoSnap claims) go to the owner-only topic `game:<id>:host`; `can_listen_game_topic` allows that topic to the owner only; host snapshots gain `rosterKey` / `submissionsKey`. `complete_submission` keeps 35's locks (one line changed: its hint's topic). Re-runnable. Revert: [`rollback/20261113000002_realtime_audience_revert.sql`](rollback/20261113000002_realtime_audience_revert.sql) (keeps 35). Deploy the app first (see the report, section J)
+
 ## Apply to the existing Supabase project
 
 ```bash

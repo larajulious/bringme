@@ -74,7 +74,13 @@ export type PlayerSnapshot = GameSnapshot & {
   };
 };
 
-export type HostSnapshot = GameSnapshot & { joinCode?: string };
+export type HostSnapshot = GameSnapshot & {
+  joinCode?: string;
+  /** Fingerprint of the active roster (Phase 2). Absent on an older database: callers fall back to the version. */
+  rosterKey?: string;
+  /** Fingerprint of the current round's submissions (ids, review statuses, removed players). */
+  submissionsKey?: string;
+};
 
 export const HOST_ACTIONS = [
   "start_game", "start_countdown", "restart_countdown", "start_round", "close_submissions",

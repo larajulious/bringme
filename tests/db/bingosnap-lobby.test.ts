@@ -175,7 +175,10 @@ describe("realtime", () => {
       "select topic, private, payload from realtime.messages order by id")).rows;
     assert.ok(rows.length >= 6, `join, join, kick, start game, countdown, hunt (got ${rows.length})`);
     assert.ok(rows.every((r) => r.topic === `game:${g.id}` && r.private));
-    assert.ok(rows.every((r) => Object.keys(r.payload).sort().join() === "phase,version"), "hints carry no player data");
+    assert.ok(rows.every((r) => Object.keys(r.payload).sort().join() === "phase,scope,version"), "hints carry no player data");
+    // Phase 2: joins are 'roster' (players debounce), the removal and the start are 'all'
+    assert.deepEqual(rows.slice(0, 3).map((r) => r.payload.scope), ["roster", "roster", "all"]);
+    assert.ok(rows.slice(3).every((r) => r.payload.scope === "all"));
   });
 
   it("only the owner and this game's guests may listen", async () => {

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
 import { fetchHostSnapshot, fetchRoster, fetchRounds, replayRound, runSteps } from "@/components/game/host-api";
+import { rosterKey, roundsKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { ItemPrivacyToggle, ItemText, useItemPrivacy } from "@/components/game/item-privacy";
 import { PhotoReviewGrid } from "@/components/game/photo-review-grid";
 import { PhotoViewer } from "@/components/game/photo-viewer";
@@ -78,20 +79,23 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
   const [newItem, setNewItem] = useState("");
   const [adding, setAdding] = useState(false);
 
+  // Each side list is re-read only when its own data changed (Phase 2): photos and reviews no longer re-read the roster.
+  const rosterDep = rosterKey(s);
   useEffect(() => {
     let live = true;
     void fetchRoster(gameId).then((r) => { if (live && r) setPlayers(r); });
     return () => { live = false; };
-  }, [gameId, s.version]);
+  }, [gameId, rosterDep]);
 
-  // Upcoming items: refreshed on every state change (a round was added, or the game moved on).
+  // Upcoming items: a round was added, opened, closed or replayed, or the game moved on.
+  const roundsDep = roundsKey(s);
   useEffect(() => {
     let live = true;
     void fetchRounds(gameId).then((x) => { if (live && x) setRoundList(x); });
     return () => { live = false; };
-  }, [gameId, s.version]);
+  }, [gameId, roundsDep]);
 
-  // Live submissions: re-read on every state change (a new photo or review decision bumps the version).
+  // Live submissions: a new photo, a review decision, a removal, or the round/phase/winner changed.
   const reqId = useRef(0);
   const wantRows = (s.phase === "active" || s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(s.round);
   const loadRows = useCallback(async () => {
@@ -105,9 +109,10 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
       if (id === reqId.current) setRowsError(true);
     }
   }, [gameId]);
+  const rowsDep = submissionsKey(s);
   useEffect(() => {
     if (wantRows) void loadRows(); else { setRows(null); }
-  }, [wantRows, s.version, s.round?.id, loadRows]);
+  }, [wantRows, rowsDep, loadRows]);
 
   /** One host step = one or more server actions in a row. `quiet`: automatic steps don't toast (another tab may have done it). */
   const send = async (step: HostAction | HostAction[], winner?: string | null, quiet = false) => {

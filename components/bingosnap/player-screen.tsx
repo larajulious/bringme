@@ -57,10 +57,13 @@ function Notice({ icon, title, text, code, children }: { icon: React.ReactNode; 
  * server clock: waiting lobby → 3-2-1 → their own card (photos saved on this phone only) → time's
  * up. Realtime hints from the game channel move every connected phone on as soon as the host starts.
  */
+/** A claim review can only concern a player who has sent a claim (pending, verified or rejected). */
+const holdsClaim = (x: BingoPlayerSnapshot) => x.me.submissions.length > 0;
+
 export function BingoPlayerScreen({ code, initial }: { code: string; initial: BingoPlayerSnapshot }) {
   const { state: s, conn, offsetMs, unauthorized, applyState, resync } = useGameSync<BingoPlayerSnapshot>({
     gameId: initial.gameId, role: "guest", initial, fetchSnapshot, tokenUrl: "/api/play/bingosnap/realtime-token",
-    deadlineOf: huntEnd,
+    deadlineOf: huntEnd, claimsRelevant: holdsClaim,
   });
   const b = s.board;
   const running = s.status === "active" && s.phase === "active";

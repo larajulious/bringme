@@ -2,7 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 
-import { GameSyncCore, clockOffset, msUntil, secondsUntil, type FetchResult } from "../lib/game/sync.ts";
+import { FALLBACK_GRACE_MS, FALLBACK_POLL_MS, GameSyncCore, SAFETY_RESYNC_MS, clockOffset, combineRealtime, fallbackPlan, guestRoute, msUntil, routeEverything, scopeOf, secondsUntil, type FetchResult, type RoutePolicy } from "../lib/game/sync.ts";
+import { rosterKey, roundsKey, submissionsKey } from "../lib/game/refresh-keys.ts";
 import { guestChannelClaims, signHs256 } from "../lib/game/jwt.ts";
 
 type S = { version: number; label: string };
@@ -177,5 +178,224 @@ describe("guest channel token", () => {
     assert.equal(c.game_id, "22222222-2222-4222-8222-222222222222");
     assert.equal(c.exp - c.iat, 3600);
     assert.ok(!("email" in c) && !("token_hash" in c));
+  });
+});
+
+// ------------------------------------------------------------------ Phase 2: audience-aware hints ----
+
+type P = S & { claims?: number };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A guest core whose fetch returns whatever `server.version` is at that moment (like the real snapshot). */
+function guest(start: number, opts: { route?: RoutePolicy<P>; debounceMs?: number; claims?: number } = {}) {
+  const server = { version: start, claims: opts.claims ?? 0 };
+  let fetches = 0;
+  const applied: number[] = [];
+  const core = new GameSyncCore<P>({
+    initial: { version: start, label: "init", claims: server.claims },
+    fetch: async () => { fetches++; return { status: "ok", state: { version: server.version, label: `v${server.version}`, claims: server.claims } }; },
+    onState: (s) => applied.push(s.version),
+    onUnauthorized: () => undefined,
+    route: opts.route ?? guestRoute<P>((s) => (s.claims ?? 0) > 0),
+    debounce: { baseMs: opts.debounceMs ?? 20, jitterMs: 0 },
+  });
+  return { core, server, applied, fetches: () => fetches };
+}
+const hint = (version: number, scope?: string) => (scope ? { version, phase: "active", scope } : { version, phase: "active" });
+
+describe("Phase 2: scopes and routing", () => {
+  it("scopeOf: missing or unknown scope (older database) means 'all'; the host topic is always 'host'", () => {
+    assert.equal(scopeOf({ version: 1 }), "all");
+    assert.equal(scopeOf({ version: 1, scope: "weird" }), "all");
+    assert.equal(scopeOf(null), "all");
+    assert.equal(scopeOf({ version: 1, scope: "roster" }), "roster");
+    assert.equal(scopeOf({ version: 1, scope: "all" }, "host"), "host");
+  });
+
+  it("guest policy: all -> now, roster -> debounce, host -> skip, claims -> only when relevant; hosts take everything", () => {
+    const r = guestRoute<{ c: boolean }>((s) => s.c);
+    assert.deepEqual(["all", "roster", "host"].map((x) => r(x as never, { c: false })), ["now", "debounce", "skip"]);
+    assert.equal(r("claims", { c: true }), "now");
+    assert.equal(r("claims", { c: false }), "skip");
+    assert.equal(r("claims", null), "skip");
+    assert.equal(guestRoute()("claims", {}), "skip", "no predicate (Bring Me): never relevant");
+    for (const s of ["all", "roster", "claims", "host"] as const) assert.equal(routeEverything(s, null), "now");
+  });
+
+  for (const n of [10, 30, 50]) {
+    it(`${n} host-only hints cost a player NOTHING, and the next 'all' hint still brings the latest state`, async () => {
+      const g = guest(5);
+      for (let i = 1; i <= n; i++) { g.server.version = 5 + i; g.core.handleSignal(hint(5 + i), "host"); g.core.handleSignal(hint(5 + i, "host")); }
+      await sleep(5);
+      assert.equal(g.fetches(), 0);
+      assert.equal(g.core.stats.skipped, 2 * n);
+      g.server.version = 6 + n;
+      g.core.handleSignal(hint(6 + n, "all"));   // e.g. 'close submissions'
+      await sleep(5);
+      assert.equal(g.fetches(), 1);
+      assert.equal(g.core.version, 6 + n, "the snapshot includes every skipped change");
+    });
+  }
+
+  it("skipped versions never block a later relevant hint (no 'consumed' version)", async () => {
+    const g = guest(1);
+    g.core.handleSignal(hint(2, "host")); g.core.handleSignal(hint(3, "host"));
+    g.server.version = 4;
+    g.core.handleSignal(hint(4, "all"));
+    await sleep(5);
+    assert.deepEqual(g.applied, [4]);
+  });
+
+  it("out-of-order hints: a late older hint after a newer snapshot costs nothing", async () => {
+    const g = guest(1);
+    g.server.version = 9;
+    g.core.handleSignal(hint(9, "all"));
+    await sleep(5);
+    for (const v of [7, 8, 9]) { g.core.handleSignal(hint(v, "all")); g.core.handleSignal(hint(v, "roster")); }
+    await sleep(40);
+    assert.equal(g.fetches(), 1);
+    assert.equal(g.core.stats.stale, 6);
+    assert.equal(g.core.version, 9);
+  });
+
+  it("reconnect after many missed hints: the re-read on SUBSCRIBED brings the latest state and cancels a pending delayed read", async () => {
+    const g = guest(3, { debounceMs: 30 });
+    g.core.handleSignal(hint(4, "roster"));   // delayed read scheduled…
+    g.server.version = 17;                   // …then the socket dropped and 13 hints were missed
+    await g.core.resync();                   // what useGameSync does on SUBSCRIBED
+    assert.equal(g.core.version, 17);
+    await sleep(60);
+    assert.equal(g.fetches(), 1, "the delayed read was dropped: we already hold a newer snapshot");
+  });
+
+  it("join hints: 30 in a burst cause ONE delayed read, which gets the final headcount", async () => {
+    const g = guest(10, { debounceMs: 25 });
+    for (let i = 1; i <= 30; i++) { g.server.version = 10 + i; g.core.handleSignal(hint(10 + i, "roster")); }
+    assert.equal(g.fetches(), 0, "nothing immediate");
+    await sleep(60);
+    assert.equal(g.fetches(), 1);
+    assert.equal(g.core.version, 40);
+  });
+
+  it("the delay is bounded: hints arriving later don't postpone the read", async () => {
+    const g = guest(1, { debounceMs: 30 });
+    g.core.handleSignal(hint(2, "roster"));
+    await sleep(15); g.server.version = 3; g.core.handleSignal(hint(3, "roster"));
+    await sleep(25);
+    assert.equal(g.fetches(), 1, "read at ~30 ms after the FIRST hint");
+    assert.equal(g.core.version, 3);
+  });
+
+  it("a phase change during a pending join delay is applied at once, and the delayed read is then dropped", async () => {
+    const g = guest(1, { debounceMs: 40 });
+    g.core.handleSignal(hint(2, "roster"));
+    g.server.version = 3;
+    g.core.handleSignal(hint(3, "all"));   // host pressed Start
+    await sleep(5);
+    assert.equal(g.core.version, 3);
+    await sleep(60);
+    assert.equal(g.fetches(), 1);
+  });
+
+  it("a delayed read still happens if the immediate snapshot was older than the join it waits for", async () => {
+    const g = guest(1, { debounceMs: 30 });
+    g.server.version = 2;
+    const pending = g.core.resync();          // in flight, will return v2
+    g.core.handleSignal(hint(3, "roster"));    // a join committed meanwhile
+    await pending;
+    g.server.version = 3;
+    await sleep(60);
+    assert.equal(g.core.version, 3);
+  });
+
+  it("a removal (scope 'all') during gameplay is applied at once", async () => {
+    const g = guest(20);
+    g.server.version = 21;
+    g.core.handleSignal(hint(21, "all"));
+    await sleep(5);
+    assert.deepEqual(g.applied, [21]);
+  });
+
+  it("claim reviews: only a player holding a claim re-reads", async () => {
+    const none = guest(5, { claims: 0 });
+    const mine = guest(5, { claims: 1 });
+    for (const g of [none, mine]) { g.server.version = 6; g.core.handleSignal(hint(6, "claims")); }
+    await sleep(5);
+    assert.deepEqual([none.fetches(), mine.fetches()], [0, 1]);
+  });
+
+  it("a legacy hint without a scope (database not migrated yet) still makes players re-read", async () => {
+    const g = guest(1);
+    g.server.version = 2;
+    g.core.handleSignal({ version: 2, phase: "lobby" });
+    await sleep(5);
+    assert.equal(g.fetches(), 1);
+  });
+
+  it("hosts re-read on every newer hint, from either topic", async () => {
+    const h = guest(1, { route: routeEverything as RoutePolicy<P> });
+    h.server.version = 2; h.core.handleSignal(hint(2), "host");
+    await sleep(5);
+    h.server.version = 3; h.core.handleSignal(hint(3, "roster"));
+    await sleep(5);
+    assert.equal(h.fetches(), 2);
+  });
+
+  it("stop() cancels a pending delayed read", async () => {
+    const g = guest(1, { debounceMs: 20 });
+    g.core.handleSignal(hint(2, "roster"));
+    g.core.stop();
+    await sleep(40);
+    assert.equal(g.fetches(), 0);
+  });
+});
+
+describe("Phase 2: Realtime health and fallback", () => {
+  it("a host relies on hints only when BOTH topics are subscribed; either one down means polling", () => {
+    assert.equal(combineRealtime("subscribed"), "subscribed");
+    assert.equal(combineRealtime("subscribed", "subscribed"), "subscribed");
+    assert.equal(combineRealtime("subscribed", "down"), "down", "host topic refused (e.g. older database) -> basic mode");
+    assert.equal(combineRealtime("down", "subscribed"), "down");
+    assert.equal(combineRealtime("subscribed", "connecting"), "connecting");
+  });
+
+  it("fallback plan is unchanged: 30 s safety while subscribed, 4 s polling (after a 6 s grace while connecting, at once when down)", () => {
+    assert.deepEqual(fallbackPlan("subscribed"), { everyMs: SAFETY_RESYNC_MS, startAfterMs: 0 });
+    assert.deepEqual(fallbackPlan("connecting"), { everyMs: FALLBACK_POLL_MS, startAfterMs: FALLBACK_GRACE_MS });
+    assert.deepEqual(fallbackPlan("down"), { everyMs: FALLBACK_POLL_MS, startAfterMs: 0 });
+    assert.deepEqual([SAFETY_RESYNC_MS, FALLBACK_POLL_MS, FALLBACK_GRACE_MS], [30_000, 4_000, 6_000]);
+  });
+
+  it("while Realtime is down, polling alone keeps a player correct (no hints at all)", async () => {
+    const g = guest(1);
+    for (let v = 2; v <= 6; v++) { g.server.version = v; await g.core.resync(); }   // each 4 s tick
+    assert.deepEqual(g.applied, [2, 3, 4, 5, 6]);
+  });
+});
+
+describe("Phase 2: host side-list refresh keys", () => {
+  const base = { version: 7, status: "live" as const, phase: "active" as const, totalRounds: 3, roundsRemaining: 2,
+    round: { id: "r1", status: "open" as const, winnerPlayerId: null, decided: false } as never, rosterKey: "R", submissionsKey: "S" };
+  it("without database fingerprints every key follows the version (pre-Phase-2 behaviour)", () => {
+    const old = { ...base, rosterKey: undefined, submissionsKey: undefined };
+    assert.equal(rosterKey(old), "v7");
+    assert.equal(submissionsKey(old), "v7");
+  });
+  it("a photo (new submissionsKey, new version) changes only the submissions key", () => {
+    const next = { ...base, version: 8, submissionsKey: "S2" };
+    assert.equal(rosterKey(next), rosterKey(base));
+    assert.equal(roundsKey(next), roundsKey(base));
+    assert.notEqual(submissionsKey(next), submissionsKey(base));
+  });
+  it("a join changes only the roster key; closing the round changes rounds and submissions keys", () => {
+    assert.notEqual(rosterKey({ ...base, rosterKey: "R2" }), rosterKey(base));
+    const closed = { ...base, round: { id: "r1", status: "closed" as const, winnerPlayerId: null, decided: false } as never, phase: "reviewing" as const };
+    assert.notEqual(roundsKey(closed), roundsKey(base));
+    assert.notEqual(submissionsKey(closed), submissionsKey(base));
+    assert.equal(rosterKey(closed), rosterKey(base));
+  });
+  it("an official winner changes the submissions key (the presenter shows the winner's photo)", () => {
+    const won = { ...base, round: { id: "r1", status: "closed" as const, winnerPlayerId: "p", decided: true } as never };
+    assert.notEqual(submissionsKey(won), submissionsKey(base));
   });
 });

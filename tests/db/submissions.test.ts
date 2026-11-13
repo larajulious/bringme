@@ -383,8 +383,10 @@ describe("snapshots and notifications", () => {
     const hostView = (await as(db, user(host), () => db.query<{ s: { submissionCount: number; round: { id: string } } }>("select public.host_game_state($1) as s", [g.id]))).rows[0].s;
     assert.equal(hostView.submissionCount, 1);
     assert.equal(hostView.round.id, g.round);
-    const hints = await db.query<{ payload: { version: number } }>("select payload from realtime.messages where topic = $1 order by id desc limit 1", [`game:${g.id}`]);
+    // Phase 2: a submission is host-only news, so its hint goes to the owner-only topic, never to players
+    const hints = await db.query<{ payload: { version: number; scope: string } }>("select payload from realtime.messages where topic = $1 order by id desc limit 1", [`game:${g.id}:host`]);
     assert.equal(hints.rows[0].payload.version, await version(g.id));
+    assert.equal(hints.rows[0].payload.scope, "host");
   });
 });
 
