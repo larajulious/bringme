@@ -10,6 +10,7 @@ import { CameraStage } from "@/components/game/camera-stage";
 import { CameraProvider, useCamera } from "@/components/game/camera-context";
 import { Confetti } from "@/components/game/confetti";
 import { Countdown } from "@/components/game/countdown";
+import { ITEM_WRAP } from "@/components/game/item-text";
 import { PlayerCount } from "@/components/game/player-count";
 import { WaitingDots } from "@/components/game/waiting-dots";
 import { TrophyIllustration } from "@/components/game/trophy";
@@ -128,7 +129,7 @@ function PlayerGameInner({ code, initial }: { code: string; initial: PlayerSnaps
             <li key={r.no} className={cn("flex items-center gap-3 rounded-3xl p-3", r.isMe ? "bg-brand-yellow text-brand-night" : "bg-white/12")}>
               <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl font-display font-bold", r.isMe ? "bg-brand-night text-brand-yellow" : "bg-brand-yellow text-brand-night")}>{r.no}</span>
               <span className="min-w-0 flex-1">
-                <span className={cn("block truncate text-sm", r.isMe ? "text-brand-night/80" : "text-white/75")}>{r.prompt}</span>
+                <span className={cn("block text-sm", ITEM_WRAP, r.isMe ? "text-brand-night/80" : "text-white/75")}>{r.prompt}</span>
                 <span className="block truncate font-display text-xl font-bold">{r.winnerName ? (r.isMe ? "You!" : r.winnerName) : "No winner"}</span>
               </span>
               {r.winnerMs !== null ? <span className="font-mono text-lg font-bold tabular-nums">{formatElapsed(r.winnerMs)}</span> : null}

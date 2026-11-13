@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
 import { fetchHostSnapshot, fetchRoster, fetchRounds, replayRound, runSteps } from "@/components/game/host-api";
+import { ITEM_WRAP, itemSize } from "@/components/game/item-text";
 import { rosterKey, roundsKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { useSubmissionRows } from "@/components/game/use-submission-rows";
 import { ItemPrivacyToggle, ItemText, useItemPrivacy } from "@/components/game/item-privacy";
@@ -298,7 +299,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{upNext ? `Round ${s.phase === "lobby" ? roundNo : roundNo + 1} item · only you can see it` : "Bring me…"}</p>
                 {item ? <ItemPrivacyToggle hidden={itemHidden} onToggle={toggleItem} className="-my-2" /> : null}
               </div>
-              <p className="break-words font-display text-2xl font-bold leading-tight text-primary min-[400px]:text-3xl sm:text-4xl">{item ? <ItemText text={item} hidden={itemHidden} /> : "—"}</p>
+              <p className={cn("font-display font-bold text-primary", ITEM_WRAP, itemSize("console", item))}>{item ? <ItemText text={item} hidden={itemHidden} /> : "—"}</p>
               <p className="mt-1 text-sm font-semibold text-muted-foreground">
                 {s.playerCount} {s.playerCount === 1 ? "player" : "players"}
                 {r ? <> · {s.submissionCount} {s.submissionCount === 1 ? "photo" : "photos"} in</> : null}

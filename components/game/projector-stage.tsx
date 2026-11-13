@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
 import { Countdown } from "@/components/game/countdown";
+import { ITEM_WRAP, isLongItem, itemSize } from "@/components/game/item-text";
 import { WinnerStage } from "@/components/game/winner-stage";
 import { useNow } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
@@ -75,9 +76,9 @@ export function ProjectorStage({
       main = <Countdown left={secondsUntil(r.openedAt, now, offsetMs)} large={big} flash="absolute" />;
     } else if (s.phase === "active" && r) {
       main = (
-        <div className="grid justify-items-center gap-4">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)] justify-items-center gap-4">
           <p className={cn("font-bold uppercase tracking-widest text-white/80", big ? "text-[clamp(1.125rem,3.4dvh,1.875rem)]" : "text-sm")}>Bring me…</p>
-          <p className={cn("max-w-full break-words font-display font-bold leading-tight text-brand-yellow", big ? "text-[clamp(2.5rem,min(9dvh,6.5vw),6rem)]" : "text-5xl")}>{started ? r.prompt : "On your marks…"}</p>
+          <p className={cn("max-w-5xl px-2 font-display font-bold text-brand-yellow", ITEM_WRAP, itemSize(big ? "stageBig" : "stage", started ? r.prompt : "On your marks…"))}>{started ? r.prompt : "On your marks…"}</p>
           <p className={cn("flex items-center gap-3 font-mono font-bold tabular-nums", big ? "text-[clamp(2rem,7dvh,3.75rem)]" : "text-3xl")}>
             <Timer aria-hidden="true" className={big ? "size-[min(3rem,6dvh)]" : "size-7"} />
             {!started ? "Starting…" : r.status === "closed" ? "Time's up" : `${Math.floor(limitLeft / 60)}:${String(limitLeft % 60).padStart(2, "0")}`}
@@ -86,10 +87,12 @@ export function ProjectorStage({
       );
     } else if (s.phase === "reviewing") {
       main = (
-        <div className="grid justify-items-center gap-3">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)] justify-items-center gap-3">
           <Hourglass aria-hidden="true" className={cn("text-brand-yellow", big ? "size-[min(6rem,11dvh)]" : "size-14")} />
           <p className={cn("font-display font-bold text-brand-yellow", big ? "text-[clamp(3rem,11dvh,6rem)]" : "text-5xl")}>Judging time!</p>
-          <p className={big ? "text-[clamp(1.5rem,4.2dvh,2.25rem)]" : "text-xl"}>{r?.prompt ? <>Does it show <strong>{r.prompt}</strong>?</> : null}</p>
+          <p className={cn("max-w-4xl px-2", ITEM_WRAP, isLongItem(r?.prompt)
+            ? (big ? "text-[clamp(1.25rem,3.4dvh,1.875rem)]" : "text-lg")
+            : (big ? "text-[clamp(1.5rem,4.2dvh,2.25rem)]" : "text-xl"))}>{r?.prompt ? <>Does it show <strong>{r.prompt}</strong>?</> : null}</p>
         </div>
       );
     } else {
@@ -102,7 +105,7 @@ export function ProjectorStage({
     }
     const showCount = s.phase === "active" || s.phase === "reviewing";
     body = (
-      <div className={cn("grid min-h-0 justify-items-center", big ? "gap-[2.5dvh] py-[2dvh]" : "gap-6 py-6")}>
+      <div className={cn("grid min-h-0 grid-cols-[minmax(0,1fr)] justify-items-center", big ? "gap-[2.5dvh] py-[2dvh]" : "gap-6 py-6")}>
         <p className={cn("font-bold uppercase tracking-widest text-white/80", big ? "text-[clamp(1.125rem,3.4dvh,1.875rem)]" : "text-sm")}>{roundLabel}</p>
         {main}
         {showCount ? (

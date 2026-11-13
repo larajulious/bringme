@@ -7,6 +7,7 @@ import { CameraGate } from "@/components/game/camera-gate";
 import { Confetti } from "@/components/game/confetti";
 import { WaitingDots } from "@/components/game/waiting-dots";
 import { useCamera } from "@/components/game/camera-context";
+import { ITEM_WRAP, itemSize } from "@/components/game/item-text";
 import { useNow } from "@/components/game/use-game-sync";
 import { Button } from "@/components/ui/button";
 import type { ClockSync } from "@/lib/game/clock";
@@ -214,18 +215,26 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
   const failed = flowState.kind === "failed" ? flowState : null;
 
   return (
-    <div className="fixed inset-0 z-30 grid grid-rows-[auto_minmax(0,1fr)_auto] bg-brand-night pb-safe pt-safe text-white landscape:tiny:grid-cols-[minmax(0,1fr)_auto] landscape:tiny:grid-rows-[auto_minmax(0,1fr)]">
-      <header className="flex items-end justify-between gap-3 px-4 pb-3 pt-3 short:pb-2 short:pt-2">
-        <div className="min-w-0">
-          <p className="inline-block rounded-full bg-white/12 px-3 py-0.5 text-xs font-bold uppercase tracking-widest text-white/85">Bring me…</p>
-          <p className="mt-1 break-words font-display text-4xl font-bold leading-[1.05] text-brand-yellow short:text-3xl tiny:text-2xl">{r.prompt ?? "…"}</p>
+    // Explicit minmax(0,1fr) column: an implicit `auto` column would grow to the item's longest word and push it off-screen.
+    <div className="fixed inset-0 z-30 grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] bg-brand-night pb-safe pt-safe text-white landscape:tiny:grid-cols-[minmax(0,1fr)_auto] landscape:tiny:grid-rows-[auto_minmax(0,1fr)]">
+      {/* Label + timer on one row, the item below at full width: on a 320 px phone it no longer shares its line
+          with the timer. The item area grows with the text but is capped, so the camera always keeps its space;
+          an extreme item scrolls there instead of being clipped. */}
+      <header className="grid min-w-0 gap-2 px-4 pb-3 pt-3 short:gap-1.5 short:pb-2 short:pt-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="grid min-w-0 justify-items-start gap-1">
+            <p className="rounded-full bg-white/12 px-3 py-0.5 text-xs font-bold uppercase tracking-widest text-white/85">Bring me…</p>
+            <p className="truncate text-xs text-white/60" role="status">{connection}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-white/70">
+              <span aria-hidden="true" className={cn("size-2 rounded-full bg-brand-coral", finalMs === null && stoppedMs === null && "animate-pulse motion-reduce:animate-none")} /> Elapsed
+            </p>
+            <p ref={timerRef} role="timer" aria-label="Elapsed time" className="rounded-2xl bg-white/10 px-3 py-1 font-mono text-2xl font-bold tabular-nums min-[375px]:text-3xl tiny:text-2xl">00.000</p>
+          </div>
         </div>
-        <div className="shrink-0 text-right">
-          <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-white/70">
-            <span aria-hidden="true" className={cn("size-2 rounded-full bg-brand-coral", finalMs === null && stoppedMs === null && "animate-pulse motion-reduce:animate-none")} /> Elapsed
-          </p>
-          <p ref={timerRef} role="timer" aria-label="Elapsed time" className="rounded-2xl bg-white/10 px-3 py-1 font-mono text-3xl font-bold tabular-nums tiny:text-2xl">00.000</p>
-          <p className="mt-1 text-xs text-white/60" role="status">{connection}</p>
+        <div className="max-h-[30dvh] overflow-y-auto overscroll-contain landscape:tiny:max-h-[24dvh]">
+          <p className={cn("text-center font-display font-bold text-brand-yellow", ITEM_WRAP, itemSize("phone", r.prompt))}>{r.prompt ?? "…"}</p>
         </div>
       </header>
 

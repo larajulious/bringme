@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Confetti } from "@/components/game/confetti";
+import { ITEM_WRAP, isLongItem } from "@/components/game/item-text";
 import { TrophyIllustration } from "@/components/game/trophy";
 import { formatElapsed } from "@/lib/game/timing";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,9 @@ export function WinnerStage({
         />
       ) : null}
       {has && celebrate ? <Confetti /> : null}
-      <div className={cn("relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-col items-center gap-3 [&>*]:shrink-0", !large && "short:gap-2 tiny:gap-1.5")}>
+      {/* The card clips (for the sunburst); its content scrolls as a last resort instead of being cut off. The photo
+          still shrinks first (flex), so this only kicks in for an extreme item on a very short screen. */}
+      <div className={cn("relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-col items-center gap-3 overflow-y-auto overscroll-contain [&>*]:shrink-0", !large && "short:gap-2 tiny:gap-1.5")}>
         <p className={cn("rounded-full bg-white/12 px-4 py-1 font-bold uppercase tracking-widest text-white/90", large ? "text-2xl" : "text-sm")}>{roundLabel}</p>
         <div className="animate-drop-in motion-reduce:animate-none">
           <TrophyIllustration dim={!has} className={large ? "w-[min(14rem,20dvh)]" : "w-32 short:w-20 tiny:w-14"} />
@@ -70,7 +73,13 @@ export function WinnerStage({
             <figcaption className={cn("mt-2 shrink-0 font-display font-semibold", large ? "text-2xl" : "text-sm")}>{winnerName}&apos;s photo</figcaption>
           </figure>
         ) : null}
-        {prompt ? <p className={cn("text-white/90", large ? "text-[clamp(1.25rem,3.4dvh,1.875rem)]" : "text-lg short:text-base")}>{has ? "for bringing" : "Item"} <strong>{prompt}</strong></p> : null}
+        {prompt ? (
+          <p className={cn("px-1 text-white/90", ITEM_WRAP, isLongItem(prompt)
+            ? (large ? "text-[clamp(1.125rem,2.8dvh,1.5rem)]" : "text-base short:text-sm")
+            : (large ? "text-[clamp(1.25rem,3.4dvh,1.875rem)]" : "text-lg short:text-base"))}>
+            {has ? "for bringing" : "Item"} <strong>{prompt}</strong>
+          </p>
+        ) : null}
         {subline ? <div className={cn("text-white/85", large ? "text-[clamp(1.125rem,3dvh,1.5rem)]" : "text-base", sublineShortHidden && "short:hidden")}>{subline}</div> : null}
         {children ? <div className="mt-2 flex flex-wrap justify-center gap-3">{children}</div> : null}
       </div>

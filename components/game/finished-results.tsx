@@ -100,7 +100,7 @@ export function FinishedResults({ gameId, initial }: { gameId: string; initial: 
                   <img src={photo} alt={`Winning photo, round ${r.no}`} loading="lazy" className={fs ? "size-[min(7rem,10dvh)] rounded-2xl bg-black object-cover" : "size-20 rounded-xl bg-black object-cover"} />
                 ) : null}
                 <div className="min-w-0 flex-1">
-                  <p className={fs ? "truncate text-[clamp(1rem,2.8dvh,1.5rem)] text-white/80" : "text-sm text-muted-foreground"}>{r.prompt}</p>
+                  <p className={fs ? "break-words text-[clamp(1rem,2.8dvh,1.5rem)] leading-snug text-white/80 [overflow-wrap:anywhere]" : "break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"}>{r.prompt}</p>
                   <p className={fs ? "truncate font-display text-[clamp(1.5rem,4.5dvh,3rem)] font-bold text-brand-yellow" : "truncate font-display text-2xl font-bold text-primary"}>{r.winnerName ?? "No winner"}</p>
                 </div>
                 {r.winnerMs !== null ? <p className={fs ? "font-mono text-[clamp(1.5rem,4.5dvh,3rem)] font-bold tabular-nums" : "font-mono text-2xl font-bold tabular-nums text-primary"}>{formatElapsed(r.winnerMs)}</p> : null}

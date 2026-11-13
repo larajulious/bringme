@@ -33,7 +33,7 @@ export function OnScreenNow({ screen, className }: { screen: OnScreen; className
       <div className="min-w-0 flex-1">
         <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">On the presenter screen</p>
         <p key={`title-${changes}`} className={cn("truncate font-display text-xl font-bold text-primary", fresh && "animate-pop-in motion-reduce:animate-none")}>{screen.title}</p>
-        {screen.detail ? <p className="truncate text-sm text-muted-foreground">{screen.detail}</p> : null}
+        {screen.detail ? <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{screen.detail}</p> : null}
       </div>
       <p className="sr-only" role="status" aria-live="polite">{fresh ? `Presenter screen now shows: ${screen.title}` : ""}</p>
     </section>
