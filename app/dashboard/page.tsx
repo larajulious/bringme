@@ -67,7 +67,7 @@ export default async function DashboardPage() {
         <Mascot mood="cheer" className="pointer-events-none absolute -bottom-4 right-6 hidden w-36 sm:block lg:right-12 lg:w-44" />
       </section>
 
-      {atLimit && entitlement ? <GameLimitNotice active={openGames} max={entitlement.max_active_games} /> : null}
+      {atLimit && entitlement ? <GameLimitNotice active={openGames} max={entitlement.max_active_games} games={active} /> : null}
       {restricted ? (
         <SubscriptionRestricted state={access.state as Exclude<typeof access.state, "active">} supportEmail={await getSupportEmail()} trialEnded={pass?.trialEndedNoPass ?? false} />
       ) : null}

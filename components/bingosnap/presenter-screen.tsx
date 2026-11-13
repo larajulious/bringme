@@ -1,6 +1,6 @@
 "use client";
 
-import { DoorClosed, Expand, Minimize, Star, Users } from "lucide-react";
+import { DoorClosed, Star, Users } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
@@ -8,10 +8,10 @@ import { Logo } from "@/components/brand/logo";
 import { Mascot } from "@/components/brand/mascot";
 import { Confetti } from "@/components/game/confetti";
 import { Countdown } from "@/components/game/countdown";
-import { connText, useChrome } from "@/components/game/presenter-screen";
+import { PresenterControls } from "@/components/game/presenter-controls";
+import { useChrome } from "@/components/game/presenter-screen";
 import { TrophyIllustration } from "@/components/game/trophy";
 import { useGameSync, useNow } from "@/components/game/use-game-sync";
-import { Button } from "@/components/ui/button";
 import { modeText } from "@/lib/bingosnap/board";
 import { patternLabel } from "@/lib/bingosnap/completion";
 import type { BingoHostSnapshot } from "@/lib/bingosnap/types";
@@ -57,16 +57,10 @@ export function BingoPresenterScreen({ gameId, initial, qr, joinUrl }: {
   return (
     <div className={cn("relative h-viewport overflow-hidden bg-brand-night text-white", chrome.idle && "cursor-none")}>
       {body}
-      <div className={cn("absolute bottom-[2dvh] right-[2vw] z-30 flex items-center gap-3 transition-opacity duration-300", chrome.idle ? "pointer-events-none opacity-0" : "opacity-100")}>
-        <span className="inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-sm font-semibold" role="status">
-          <span aria-hidden="true" className={cn("size-2.5 rounded-full", conn === "live" ? "bg-emerald-500" : conn === "offline" ? "bg-brand-coral" : "bg-brand-yellow")} />
-          {connText[conn]}
-        </span>
-        <Button type="button" variant="outline-light" size="sm" onClick={chrome.toggleFullscreen}>
-          {chrome.fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}
-          {chrome.fullscreen ? "Exit fullscreen" : "Fullscreen"} <kbd className="ml-1 rounded bg-white/15 px-1.5 font-mono text-xs">F</kbd>
-        </Button>
-      </div>
+      <PresenterControls
+        conn={conn} idle={chrome.idle} fullscreen={chrome.fullscreen} onToggleFullscreen={chrome.toggleFullscreen}
+        joinUrl={joinUrl} joinCode={s.joinCode} qr={qr} title={s.title}
+      />
     </div>
   );
 }

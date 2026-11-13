@@ -24,15 +24,15 @@ export default async function NewGamePage() {
     );
   }
 
-  const { count } = await (await createClient()).from("games").select("id", { count: "exact", head: true }).eq("owner_id", userId).in("status", ["draft", "lobby", "live"]);
-  const open = count ?? 0;
+  const { data: openGames, count } = await (await createClient()).from("games").select("id, title, status, game_type", { count: "exact" }).eq("owner_id", userId).in("status", ["draft", "lobby", "live"]);
+  const open = count ?? openGames?.length ?? 0;
   const atLimit = open >= entitlement.max_active_games;
 
   return (
     <>
       <PageHeading title="Create a game" description="Pick your rounds, then open the lobby for your players." />
       <div className="max-w-3xl">
-        {atLimit ? <GameLimitNotice active={open} max={entitlement.max_active_games} /> : <GameBuilder maxRounds={entitlement.max_rounds_per_game} />}
+        {atLimit ? <GameLimitNotice active={open} max={entitlement.max_active_games} games={openGames ?? []} /> : <GameBuilder maxRounds={entitlement.max_rounds_per_game} />}
       </div>
     </>
   );

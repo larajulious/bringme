@@ -1,6 +1,6 @@
 "use client";
 
-import { DoorClosed, Expand, Minimize, Users } from "lucide-react";
+import { DoorClosed, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
@@ -9,18 +9,17 @@ import { Mascot } from "@/components/brand/mascot";
 import { Confetti } from "@/components/game/confetti";
 import { fetchHostSnapshot, fetchRoster } from "@/components/game/host-api";
 import { rosterKey, submissionsKey } from "@/lib/game/refresh-keys";
+import { PresenterControls } from "@/components/game/presenter-controls";
 import { ProjectorStage } from "@/components/game/projector-stage";
 import { TrophyIllustration } from "@/components/game/trophy";
-import { useGameSync, type Conn } from "@/components/game/use-game-sync";
+import { useGameSync } from "@/components/game/use-game-sync";
 import { useSubmissionRows } from "@/components/game/use-submission-rows";
-import { Button } from "@/components/ui/button";
 import { formatElapsed } from "@/lib/game/timing";
 import type { HostSnapshot } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
 
 type Player = { id: string; nickname: string };
 
-export const connText: Record<Conn, string> = { connecting: "Connecting…", live: "Live", basic: "Live (basic)", reconnecting: "Reconnecting…", offline: "Offline" };
 const IDLE_MS = 2_500;
 
 /**
@@ -71,21 +70,10 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
   return (
     <div className={cn("relative h-viewport overflow-hidden bg-brand-night text-white", chrome.idle && "cursor-none")}>
       {body}
-      <div
-        className={cn(
-          "absolute bottom-[2dvh] right-[2vw] z-30 flex items-center gap-3 transition-opacity duration-300",
-          chrome.idle ? "pointer-events-none opacity-0" : "opacity-100",
-        )}
-      >
-        <span className="inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-sm font-semibold" role="status">
-          <span aria-hidden="true" className={cn("size-2.5 rounded-full", conn === "live" ? "bg-emerald-500" : conn === "offline" ? "bg-brand-coral" : "bg-brand-yellow")} />
-          {connText[conn]}
-        </span>
-        <Button type="button" variant="outline-light" size="sm" onClick={chrome.toggleFullscreen}>
-          {chrome.fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}
-          {chrome.fullscreen ? "Exit fullscreen" : "Fullscreen"} <kbd className="ml-1 rounded bg-white/15 px-1.5 font-mono text-xs">F</kbd>
-        </Button>
-      </div>
+      <PresenterControls
+        conn={conn} idle={chrome.idle} fullscreen={chrome.fullscreen} onToggleFullscreen={chrome.toggleFullscreen}
+        joinUrl={joinUrl} joinCode={s.joinCode ?? ""} qr={qr} title={s.title}
+      />
     </div>
   );
 }

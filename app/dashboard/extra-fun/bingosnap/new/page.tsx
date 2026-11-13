@@ -28,15 +28,15 @@ export default async function NewBingoSnapPage() {
     );
   }
 
-  const { count } = await (await createClient()).from("games").select("id", { count: "exact", head: true }).eq("owner_id", userId).in("status", ["draft", "lobby", "live"]);
-  const open = count ?? 0;
+  const { data: openGames, count } = await (await createClient()).from("games").select("id, title, status, game_type", { count: "exact" }).eq("owner_id", userId).in("status", ["draft", "lobby", "live"]);
+  const open = count ?? openGames?.length ?? 0;
   const atLimit = open >= entitlement.max_active_games;
 
   return (
     <>
       {back}
       <PageHeading title="New BingoSnap game" description="Tap a square to write what players must photograph. Save a draft any time; publish when every square is ready." />
-      {atLimit ? <GameLimitNotice active={open} max={entitlement.max_active_games} /> : <BoardEditor maxPlayers={entitlement.max_players_per_game} />}
+      {atLimit ? <GameLimitNotice active={open} max={entitlement.max_active_games} games={openGames ?? []} /> : <BoardEditor maxPlayers={entitlement.max_players_per_game} />}
     </>
   );
 }

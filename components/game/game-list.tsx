@@ -7,12 +7,10 @@ import { useState } from "react";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { gameHref } from "@/lib/game/links";
 import type { Game } from "@/lib/supabase/database.types";
 
 export type GameListItem = Pick<Game, "id" | "title" | "status" | "join_code" | "created_at"> & Partial<Pick<Game, "game_type">>;
-
-/** Each game type has its own host screen. */
-const gameHref = (g: GameListItem) => (g.game_type === "bingosnap" ? `/dashboard/extra-fun/bingosnap/${g.id}` : `/dashboard/games/${g.id}`);
 
 const statusBadge: Record<Game["status"], { label: string; variant: "yellow" | "coral" | "success" | "secondary" }> = {
   draft: { label: "Draft", variant: "secondary" },
