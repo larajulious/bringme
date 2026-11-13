@@ -7,6 +7,9 @@ import { BoardPreview } from "@/components/bingosnap/board-preview";
 import { BoardEditor } from "@/components/bingosnap/board-editor";
 import { BingoHostDashboard } from "@/components/bingosnap/host-dashboard";
 import { BingoHostLobby } from "@/components/bingosnap/host-lobby";
+import { HostJoinTools } from "@/components/game/host-join-tools";
+import { QrCode } from "@/components/game/qr-code";
+import { TvLinkButton } from "@/components/game/tv-link-button";
 import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
@@ -62,12 +65,14 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
     );
   }
 
+  const site = getSiteUrl();
+  const url = joinUrl(site.url, s.joinCode);
+  const join = s.status === "lobby" || s.status === "active" ? { url, code: s.joinCode, title: s.title } : undefined;
+
   if (s.status === "lobby") {
-    const site = getSiteUrl();
-    const url = joinUrl(site.url, s.joinCode);
     return (
       <>
-        <BackLink presentId={s.gameId} />
+        <BackLink presentId={s.gameId} join={join} />
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant="outline">BingoSnap</Badge>
           <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -82,7 +87,7 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <BackLink presentId={s.gameId} />
+      <BackLink presentId={s.gameId} join={join} />
       {s.status === "active" || (s.status === "completed" && s.submissions.length) ? <BingoHostDashboard initial={s} /> : null}
       {s.status === "active" ? null : (
         <>
@@ -144,9 +149,16 @@ export default async function BingoSnapGamePage({ params }: { params: Promise<{ 
   );
 }
 
-function BackLink({ presentId }: { presentId?: string }) {
+function BackLink({ presentId, join }: { presentId?: string; join?: { url: string; code: string; title: string } }) {
   return (
     <BackBar href="/dashboard/extra-fun" label="Extra Fun">
+      {join ? (
+        <HostJoinTools
+          joinUrl={join.url} joinCode={join.code} title={join.title}
+          qr={<QrCode value={join.url} label={`QR code to join ${join.title}. Room code ${join.code}`} className="h-auto w-full" />}
+        />
+      ) : null}
+      {presentId ? <TvLinkButton gameId={presentId} /> : null}
       {presentId ? (
         <Button asChild size="sm" variant="secondary">
           <Link href={`/present/${presentId}`} target="_blank" rel="noopener">

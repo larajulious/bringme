@@ -24,10 +24,11 @@ type Snap = { version: number; serverNow: string; countdownEndsAt: string | null
  */
 export function useGameSync<S extends Snap>(opts: {
   gameId: string;
-  role: "guest" | "host";
+  /** "screen": a TV link (no sign-in). Token-authorized like a guest, but sees every change like the presenter. */
+  role: "guest" | "host" | "screen";
   initial: S;
   fetchSnapshot: () => Promise<FetchResult<S>>;
-  /** Guests only: where the short-lived channel token comes from (BingoSnap has its own). */
+  /** Guests / screens: where the short-lived channel token comes from (BingoSnap and TV links have their own). */
   tokenUrl?: string;
   /** A server deadline read from the current state (e.g. BingoSnap's hunt end): re-read right after it, and again after the 2 s claim grace. */
   deadlineOf?: (s: S) => string | null;
@@ -40,7 +41,9 @@ export function useGameSync<S extends Snap>(opts: {
   const [mainRt, setRt] = useState<RtStatus>("connecting");
   /** Hosts only: the owner-only topic. Guests never join it. */
   const [hostRt, setHostRt] = useState<RtStatus>("connecting");
-  const rt = combineRealtime(mainRt, role === "host" ? hostRt : undefined);
+  /** Host and TV screens also join the host-only topic (submissions, reviews, claims). */
+  const seesAll = role === "host" || role === "screen";
+  const rt = combineRealtime(mainRt, seesAll ? hostRt : undefined);
   const claimsRef = useRef(opts.claimsRelevant);
   claimsRef.current = opts.claimsRelevant;
   const [online, setOnline] = useState(true);
@@ -73,7 +76,7 @@ export function useGameSync<S extends Snap>(opts: {
       onState: (s) => setState(s),
       onUnauthorized: () => setUnauthorized(true),
       // Hosts (console, presenter) need every change; players only what changes their own screen.
-      route: role === "host" ? routeEverything : guestRoute<S>((s) => claimsRef.current?.(s) ?? false),
+      route: role !== "guest" ? routeEverything : guestRoute<S>((s) => claimsRef.current?.(s) ?? false),
       debounce: ROSTER_DEBOUNCE,
     });
     core.current = c;
@@ -106,7 +109,7 @@ export function useGameSync<S extends Snap>(opts: {
 
     const start = async () => {
       try {
-        if (role === "guest") {
+        if (role !== "host") {
           const fetchToken = async () => {
             const res = await fetch(tokenUrl, { cache: "no-store" });
             if (res.status === 401) { resync(); throw new Error("unauthorized"); }
@@ -151,7 +154,7 @@ export function useGameSync<S extends Snap>(opts: {
         };
         channel = watch(`game:${gameId}`, "game", setRt);
         // Same socket, second channel: host-only hints (an older database refuses it -> "basic" polling, still correct).
-        if (role === "host") hostChannel = watch(`game:${gameId}:host`, "host", setHostRt);
+        if (role !== "guest") hostChannel = watch(`game:${gameId}:host`, "host", setHostRt);
       } catch {
         if (!cancelled) { setRt("down"); setHostRt("down"); }
       }

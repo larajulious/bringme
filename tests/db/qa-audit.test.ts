@@ -29,7 +29,9 @@ const AUTH_EXEC = [
   "game_transition", "generate_join_code", "host_game_state", "is_super_admin", "my_access_status", "my_checkout_status", "my_entitlement",
   "my_game_pass_summary", "my_pass_timeline", "my_purchase_history", "my_trial_eligibility", "owns_game", "owns_game_path",
   "replay_round", // migration 26: owner-checked inside
-  "review_submission", "round_ranking", "start_trial",
+  "review_submission", "round_ranking",
+  "screen_link", // migration 20261113000003: owner-checked inside
+  "start_trial",
 ];
 const execFor = async (role: string) => (await db.query<{ proname: string }>(
   `select p.proname from pg_proc p where p.pronamespace='public'::regnamespace and p.prorettype <> 'trigger'::regtype
@@ -89,7 +91,7 @@ describe("TypeScript types match the migrated schema", () => {
       });
       if (!ok) missing.push(`${name}(${args.join(",")})`);
     }
-    assert.equal(count, 73, `parsed ${count} functions (update when the types gain or lose functions)`);
+    assert.equal(count, 75, `parsed ${count} functions (update when the types gain or lose functions)`);
     assert.deepEqual(missing, []);
   });
 });

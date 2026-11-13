@@ -63,6 +63,9 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/join") ||
     // Guest APIs authenticate with their own player token inside the handler
     path.startsWith("/api/play") ||
+    // TV links (smart-TV presenter screen): the secret token in the path is the credential, checked in the handlers
+    path.startsWith("/tv/") ||
+    path.startsWith("/api/screen/") ||
     // Polar webhooks carry no session: the handler verifies the Standard Webhooks signature
     path === "/api/webhooks/polar" ||
     // Homepage tap counter: anonymous by design; throttled + rate-limited in the handler and in SQL

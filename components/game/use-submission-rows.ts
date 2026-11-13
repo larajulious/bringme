@@ -14,8 +14,11 @@ export type PhotoRow = LiveSubmission & { photoKey: string | null };
  *  - photos this screen already holds are not signed again (in-memory, this tab and game only);
  *  - refreshed on its own before a shown URL expires, and when a picture fails to load.
  */
-export function useSubmissionRows(gameId: string, opts: { view: "host" | "presenter"; enabled: boolean; dep: string }) {
+export function useSubmissionRows(gameId: string, opts: { view: "host" | "presenter"; enabled: boolean; dep: string; url?: string }) {
   const { view, enabled, dep } = opts;
+  const base = opts.url ?? `/api/host/games/${gameId}/submissions`;
+  /** The host route serves both views; a custom route (TV link) is presenter-only already. */
+  const viewQuery = view === "presenter" && !opts.url;
   const [rows, setRows] = useState<PhotoRow[] | null>(null);
   const [error, setError] = useState(false);
   const loader = useRef<SubmissionPhotoLoader<PhotoRow> | null>(null);
@@ -25,9 +28,9 @@ export function useSubmissionRows(gameId: string, opts: { view: "host" | "presen
     const l = new SubmissionPhotoLoader<PhotoRow>({
       fetchListing: async (have): Promise<ListingResult<PhotoRow>> => {
         const q = new URLSearchParams();
-        if (view === "presenter") q.set("view", "presenter");
+        if (viewQuery) q.set("view", "presenter");
         if (have.length) q.set("have", have.join(","));
-        const res = await fetch(`/api/host/games/${gameId}/submissions${q.size ? `?${q}` : ""}`, { cache: "no-store" }).catch(() => null);
+        const res = await fetch(`${base}${q.size ? `?${q}` : ""}`, { cache: "no-store" }).catch(() => null);
         if (!res) return { status: "error" };
         if (res.status === 401 || res.status === 403 || res.status === 404) return { status: "fatal" };
         if (!res.ok) return { status: "error" };
@@ -39,7 +42,7 @@ export function useSubmissionRows(gameId: string, opts: { view: "host" | "presen
     });
     loader.current = l;
     return () => { l.stop(); if (loader.current === l) loader.current = null; };
-  }, [gameId, view, enabled]);
+  }, [gameId, view, enabled, base, viewQuery]);
 
   // Every change of the list's data (a photo, a decision, a removal, the round/phase/winner) re-reads it once.
   useEffect(() => {

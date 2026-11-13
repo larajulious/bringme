@@ -8,7 +8,8 @@ import { Logo } from "@/components/brand/logo";
 import { Mascot } from "@/components/brand/mascot";
 import { Confetti } from "@/components/game/confetti";
 import { Countdown } from "@/components/game/countdown";
-import { connText, useChrome } from "@/components/game/presenter-screen";
+import { LinkEnded, connText, useChrome } from "@/components/game/presenter-screen";
+import { fetchScreenSnapshot, screenApi } from "@/components/game/screen-api";
 import { TrophyIllustration } from "@/components/game/trophy";
 import { useGameSync, useNow } from "@/components/game/use-game-sync";
 import { Button } from "@/components/ui/button";
@@ -31,13 +32,16 @@ const clockText = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60
 /**
  * Audience-safe BingoSnap screen for the projector / TV (/present/[id]). Display only. It reads the
  * server's presenter snapshot (no rejection reasons, no claimed squares, challenges only after the hunt
- * starts) and follows lobby → 3-2-1 → hunt → results on its own.
+ * starts) and follows lobby → 3-2-1 → hunt → results on its own. With `screenToken` it is a TV link (no sign-in).
  */
-export function BingoPresenterScreen({ gameId, initial, qr, joinUrl }: {
-  gameId: string; initial: BingoHostSnapshot; qr: ReactNode; joinUrl: string;
+export function BingoPresenterScreen({ gameId, initial, qr, joinUrl, screenToken }: {
+  gameId: string; initial: BingoHostSnapshot; qr: ReactNode; joinUrl: string; screenToken?: string;
 }) {
-  const { state: s, conn, offsetMs } = useGameSync<BingoHostSnapshot>({
-    gameId, role: "host", initial, fetchSnapshot: () => fetchPresenterSnapshot(gameId), deadlineOf: (x) => x.board.huntEndsAt,
+  const { state: s, conn, offsetMs, unauthorized } = useGameSync<BingoHostSnapshot>({
+    gameId, initial, deadlineOf: (x) => x.board.huntEndsAt,
+    ...(screenToken
+      ? { role: "screen" as const, tokenUrl: `${screenApi(screenToken)}/realtime-token`, fetchSnapshot: () => fetchScreenSnapshot<BingoHostSnapshot>(screenToken) }
+      : { role: "host" as const, fetchSnapshot: () => fetchPresenterSnapshot(gameId) }),
   });
   const chrome = useChrome();
   const b = s.board;
@@ -48,7 +52,8 @@ export function BingoPresenterScreen({ gameId, initial, qr, joinUrl }: {
   const over = live && !beforeHunt && (b.huntOver || left === 0 || s.phase !== "active");
 
   let body: ReactNode;
-  if (s.status === "cancelled") body = <Ended title={s.title} />;
+  if (screenToken && unauthorized) body = <LinkEnded />;
+  else if (s.status === "cancelled") body = <Ended title={s.title} />;
   else if (s.status === "completed" || b.resultsAt) body = <Results s={s} />;
   else if (s.status !== "active") body = <Lobby s={s} qr={qr} joinUrl={joinUrl} />;
   else if (beforeHunt) body = <Starting s={s} left={secondsUntil(s.countdownEndsAt ?? b.huntStartedAt, now, offsetMs)} />;

@@ -372,6 +372,8 @@ export type Database = {
       bingo_games: { Row: BingoGameRow; Insert: never; Update: never; Relationships: [] };
       bingo_cells: { Row: BingoCellRow; Insert: never; Update: never; Relationships: [] };
       bingo_submissions: { Row: BingoSubmissionRow; Insert: never; Update: never; Relationships: [] };
+      /** TV links (migration 20261113000003): no client access; read by the server (service role) only. */
+      game_screens: { Row: { game_id: string; token: string; created_at: string }; Insert: never; Update: never; Relationships: [] };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -408,6 +410,10 @@ export type Database = {
       /** Service role only. Returns the player's authoritative snapshot (or null). */
       player_game_state: { Args: { p_token_hash: string }; Returns: Json };
       host_game_state: { Args: { p_game: string }; Returns: Json };
+      /** Owner only: the game's TV link token (created on first use; p_reset replaces it). */
+      screen_link: { Args: { p_game: string; p_reset?: boolean }; Returns: string };
+      /** Service role only: audience-safe snapshot for a TV link token (null = unknown/reset). */
+      screen_state: { Args: { p_token: string }; Returns: Json };
       /** Service role only (Phase 8). Records the tap-time intent. */
       begin_submission: {
         Args: { p_token_hash: string; p_round: string; p_attempt: string; p_elapsed_ms: number; p_meta?: Json };

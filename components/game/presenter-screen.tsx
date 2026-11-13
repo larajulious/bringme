@@ -1,6 +1,6 @@
 "use client";
 
-import { DoorClosed, Expand, Minimize, Users } from "lucide-react";
+import { DoorClosed, Expand, Link2Off, Minimize, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
@@ -10,6 +10,7 @@ import { Confetti } from "@/components/game/confetti";
 import { fetchHostSnapshot, fetchRoster } from "@/components/game/host-api";
 import { rosterKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { ProjectorStage } from "@/components/game/projector-stage";
+import { fetchScreenSnapshot, screenApi } from "@/components/game/screen-api";
 import { TrophyIllustration } from "@/components/game/trophy";
 import { useGameSync, type Conn } from "@/components/game/use-game-sync";
 import { useSubmissionRows } from "@/components/game/use-submission-rows";
@@ -28,11 +29,19 @@ const IDLE_MS = 2_500;
  * game from their private console. It never shows the item list, upcoming items, host controls or any photo other
  * than an official winner's. It follows every phase on its own (lobby → rounds → final results) through the same
  * realtime sync as the console. Controls fade out when the mouse is idle; the screen is kept awake if supported.
+ * With `screenToken` it is a TV link (/tv/[token], no sign-in): every read goes through the token-checked
+ * /api/screen routes instead of the host's session.
  */
-export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }: {
-  gameId: string; initial: HostSnapshot; initialPlayers: Player[]; qr: ReactNode; joinUrl: string;
+export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl, screenToken }: {
+  gameId: string; initial: HostSnapshot; initialPlayers: Player[]; qr: ReactNode; joinUrl: string; screenToken?: string;
 }) {
-  const { state: s, conn, offsetMs } = useGameSync<HostSnapshot>({ gameId, role: "host", initial, fetchSnapshot: () => fetchHostSnapshot(gameId) });
+  const api = screenToken ? screenApi(screenToken) : null;
+  const { state: s, conn, offsetMs, unauthorized } = useGameSync<HostSnapshot>({
+    gameId, initial,
+    ...(screenToken
+      ? { role: "screen" as const, tokenUrl: `${api}/realtime-token`, fetchSnapshot: () => fetchScreenSnapshot<HostSnapshot>(screenToken) }
+      : { role: "host" as const, fetchSnapshot: () => fetchHostSnapshot(gameId) }),
+  });
   const [players, setPlayers] = useState(initialPlayers);
   const [photos, setPhotos] = useState<{ no: number; photoUrl: string | null }[]>([]);
   const chrome = useChrome();
@@ -41,30 +50,34 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
   const rosterDep = rosterKey(s);
   useEffect(() => {
     let live = true;
-    void fetchRoster(gameId).then((r) => { if (live && r) setPlayers(r); });
+    const load = api
+      ? fetch(`${api}/roster`, { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).then((d: { players: Player[] } | null) => d?.players ?? null).catch(() => null)
+      : fetchRoster(gameId);
+    void load.then((r) => { if (live && r) setPlayers(r); });
     return () => { live = false; };
-  }, [gameId, rosterDep]);
+  }, [gameId, api, rosterDep]);
 
   // During a round: who has submitted (names only on screen) and, once official, the winner's photo.
   // The presenter view never receives any other photo URL (Phase 3: a public screen holds no review photos).
   const inRound = (s.phase === "active" || s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(s.round);
-  const rows = useSubmissionRows(gameId, { view: "presenter", enabled: inRound, dep: submissionsKey(s) }).rows ?? [];
+  const rows = useSubmissionRows(gameId, { view: "presenter", enabled: inRound, dep: submissionsKey(s), url: api ? `${api}/submissions` : undefined }).rows ?? [];
 
   useEffect(() => {
     if (s.status !== "finished") return;
     let live = true;
-    fetch(`/api/host/games/${gameId}/results`, { cache: "no-store" })
+    fetch(api ? `${api}/results` : `/api/host/games/${gameId}/results`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("failed"))))
       .then((d: { rounds: { no: number; photoUrl: string | null }[] }) => { if (live) setPhotos(d.rounds); })
       .catch(() => undefined);
     return () => { live = false; };
-  }, [gameId, s.status]);
+  }, [gameId, api, s.status]);
 
   const r = s.round;
   const winnerPhoto = s.phase === "winner_announced" && r?.decided && r.winnerPlayerId ? rows.find((x) => x.playerId === r.winnerPlayerId)?.photoUrl ?? null : null;
 
   let body: ReactNode;
-  if (s.status === "finished" || s.status === "canceled") body = <FinalScreen s={s} photos={photos} />;
+  if (screenToken && unauthorized) body = <LinkEnded />;
+  else if (s.status === "finished" || s.status === "canceled") body = <FinalScreen s={s} photos={photos} />;
   else if (s.phase === "lobby" && s.status === "lobby") body = <LobbyWall s={s} players={players} qr={qr} joinUrl={joinUrl} />;
   else body = <ProjectorStage presenter s={s} offsetMs={offsetMs} submittedNames={rows.map((x) => x.nickname)} winnerPhotoUrl={winnerPhoto} actions={null} />;
 
@@ -86,6 +99,18 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl }
           {chrome.fullscreen ? "Exit fullscreen" : "Fullscreen"} <kbd className="ml-1 rounded bg-white/15 px-1.5 font-mono text-xs">F</kbd>
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** A TV link that was reset by the host (or no longer exists). */
+export function LinkEnded() {
+  return (
+    <div className="relative isolate grid h-full place-items-center content-center gap-4 px-[5vw] text-center">
+      <Backdrop />
+      <Link2Off aria-hidden="true" className="size-24 text-brand-yellow" />
+      <h1 className="font-display text-[clamp(2.25rem,7dvh,4rem)] font-bold">This TV link has ended</h1>
+      <p className="max-w-2xl text-[clamp(1.125rem,3.2dvh,1.75rem)] text-white/85">The Game Master reset it. Ask them for the new TV link.</p>
     </div>
   );
 }

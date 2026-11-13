@@ -26,3 +26,19 @@ export function guestChannelClaims(args: { playerId: string; gameId: string; now
     exp: args.nowSeconds + GUEST_TOKEN_TTL_SECONDS,
   };
 }
+
+/**
+ * Claims for a TV link's Realtime token (migration 20261113000003). role=anon, no database privileges; the channel
+ * policy accepts it only while `screen_token` is still the game's current TV link, so a reset cuts it off.
+ */
+export function screenChannelClaims(args: { gameId: string; screenToken: string; nowSeconds: number }) {
+  return {
+    role: "anon",
+    sub: args.gameId,
+    kind: "screen",
+    game_id: args.gameId,
+    screen_token: args.screenToken,
+    iat: args.nowSeconds,
+    exp: args.nowSeconds + GUEST_TOKEN_TTL_SECONDS,
+  };
+}

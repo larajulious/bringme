@@ -5,7 +5,10 @@ import { CircleCheck, MonitorPlay } from "lucide-react";
 
 import { FinishedResults } from "@/components/game/finished-results";
 import { HostConsole } from "@/components/game/host-console";
+import { HostJoinTools } from "@/components/game/host-join-tools";
 import { LobbyView } from "@/components/game/lobby-view";
+import { QrCode } from "@/components/game/qr-code";
+import { TvLinkButton } from "@/components/game/tv-link-button";
 import { BackBar, PageHeading } from "@/components/layout/dashboard-shell";
 import { formatDate } from "@/components/subscription/access-badge";
 import { Badge } from "@/components/ui/badge";
@@ -39,11 +42,21 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   const roster = players.data ?? [];
 
   const presentable = game.status === "lobby" || game.status === "live" || game.status === "finished";
+  const joinable = game.status === "lobby" || game.status === "live";
+  const site = getSiteUrl();
+  const url = joinUrl(site.url, game.join_code);
   const back = (
     <BackBar href="/dashboard" label="Dashboard">
+      {joinable ? (
+        <HostJoinTools
+          joinUrl={url} joinCode={game.join_code} title={game.title}
+          qr={<QrCode value={url} label={`QR code to join ${game.title}. Room code ${game.join_code}`} className="h-auto w-full" />}
+        />
+      ) : null}
       {presentable ? (
         <>
           <span className="hidden text-sm text-muted-foreground md:inline">Projecting? Players only see what they should.</span>
+          <TvLinkButton gameId={game.id} />
           <Button asChild size="sm" variant="secondary">
             <Link href={`/present/${game.id}`} target="_blank" rel="noopener">
               <MonitorPlay aria-hidden="true" /> Presenter screen<span className="sr-only"> (opens in a new window)</span>
@@ -55,8 +68,6 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   );
 
   if (game.status === "lobby") {
-    const site = getSiteUrl();
-    const url = joinUrl(site.url, game.join_code);
     return (
       <>
         {back}
