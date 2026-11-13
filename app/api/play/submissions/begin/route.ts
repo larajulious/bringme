@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       p_elapsed_ms: elapsed,
       p_meta: sanitizeClientMeta(body.meta),
     });
-    if (error) throw toHttpError(error.message);
+    if (error) throw toHttpError(error.message, error.code);
 
     const r = data as { status: string; gameId?: string; playerId?: string; elapsedMs?: number | null; rankMs?: number | null; timing?: string };
     if (r.status === "already_submitted") {

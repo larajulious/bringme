@@ -25,7 +25,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       p_game: id, p_expected_revision: v.expectedRevision ?? -1, p_title: v.title, p_board_size: v.boardSize, p_win_mode: v.winMode,
       p_free_space: v.freeSpace, p_duration_seconds: v.durationSeconds, p_winner_rule: v.winnerRule, p_cells: v.cells, p_publish: v.publish,
     });
-    if (error) throw toBingoHttpError(error.message);
+    if (error) throw toBingoHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

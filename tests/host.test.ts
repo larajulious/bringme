@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { DB_BUSY, isTransientDbError } from "../lib/api/db-errors.ts";
 import { parseGameInput } from "../lib/host/validation.ts";
 import { joinUrl, redirectBase, resolveSiteUrl } from "../lib/site/url.ts";
 import { qrMatrix, qrPath, QUIET_ZONE } from "../lib/site/qr.ts";
@@ -91,5 +92,15 @@ describe("parsePlayerName", () => {
   it("counts code points, not UTF-16 units", () => {
     assert.ok(parsePlayerName("🎉".repeat(24)).ok);
     assert.equal(parsePlayerName("🎉".repeat(25)).ok, false);
+  });
+});
+
+describe("isTransientDbError (audit G1/M4: retryable database failures)", () => {
+  it("deadlock, serialization failure, lock/statement timeout and a busy pool are transient", () => {
+    for (const c of ["40P01", "40001", "55P03", "57014", "PGRST003"]) assert.equal(isTransientDbError(c), true, c);
+    assert.equal(DB_BUSY, "db_busy");
+  });
+  it("business-rule and other errors are not (they must not be retried blindly)", () => {
+    for (const c of ["P0001", "23505", "42501", "PGRST202", "", null, undefined, 40001]) assert.equal(isTransientDbError(c), false, String(c));
   });
 });

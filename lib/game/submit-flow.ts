@@ -9,6 +9,8 @@
  *    timing), then wait for a manual retry. No second confirmation is needed.
  *  - Nothing is ever resubmitted after acceptance.
  */
+import { DB_BUSY } from "../api/db-errors.ts";
+
 export class SubmitError extends Error {
   code: string;
   retryable: boolean;
@@ -94,22 +96,31 @@ export class SubmissionFlow {
       earlyBegin?.catch(() => undefined); // surfaced below; avoid an unhandled rejection while awaiting the blob
       const blob = p.blobValue ?? (p.blobValue = await p.blob);
 
+      // Set once the photo is stored; a "database busy" answer to `complete` then retries only `complete`
+      // (the stored photo is still valid). Any other failure starts over from `begin` as before.
+      let uploads = 0;
+      let stored = false;
       for (let attempt = 0; ; attempt++) {
         try {
-          const b = await (earlyBegin ?? this.deps.begin(p.input)); // resume => fresh upload URL, same timing
-          earlyBegin = null;
-          if (b.status === "already_submitted") {
-            this.set({ kind: "accepted", elapsedMs: b.elapsedMs, timing: null });
-            return;
+          if (!stored) {
+            const b = await (earlyBegin ?? this.deps.begin(p.input)); // resume => fresh upload URL, same timing
+            earlyBegin = null;
+            if (b.status === "already_submitted") {
+              this.set({ kind: "accepted", elapsedMs: b.elapsedMs, timing: null });
+              return;
+            }
+            uploads++;
+            this.set({ kind: "uploading", progress: 0, attempt: attempt + 1 });
+            await this.deps.upload(blob, b.uploadUrl, (f) => this.set({ kind: "uploading", progress: Math.min(1, Math.max(0, f)), attempt: attempt + 1 }));
+            stored = true;
           }
-          this.set({ kind: "uploading", progress: 0, attempt: attempt + 1 });
-          await this.deps.upload(blob, b.uploadUrl, (f) => this.set({ kind: "uploading", progress: Math.min(1, Math.max(0, f)), attempt: attempt + 1 }));
-          const done = await this.deps.complete({ attemptId: p.input.attemptId, meta: { uploadAttempts: attempt + 1 } });
+          const done = await this.deps.complete({ attemptId: p.input.attemptId, meta: { uploadAttempts: uploads } });
           this.set({ kind: "accepted", elapsedMs: done.elapsedMs, timing: done.timing });
           return;
         } catch (e) {
           earlyBegin = null;
           const err = e instanceof SubmitError ? e : new SubmitError("network", true);
+          if (!(stored && err.code === DB_BUSY)) stored = false;
           if (!err.retryable) throw err;
           if (attempt >= AUTO_RETRY_DELAYS_MS.length) throw err;
           await this.deps.sleep(AUTO_RETRY_DELAYS_MS[attempt]);

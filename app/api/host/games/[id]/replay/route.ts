@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       throw new HttpError(400, "invalid_version");
     }
     const { data, error } = await supabase.rpc("replay_round", { p_game: id, p_expected_version: body.expectedVersion as number });
-    if (error) throw toHttpError(error.message);
+    if (error) throw toHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

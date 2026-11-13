@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       p_expected_version: body.expectedVersion as number,
       p_winner: winner,
     });
-    if (error) throw toHttpError(error.message);
+    if (error) throw toHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

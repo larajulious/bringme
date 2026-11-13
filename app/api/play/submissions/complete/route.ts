@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       p_attempt: body.attemptId,
       p_meta: { ...sanitizeClientMeta(body.meta), bytes: verdict.bytes },
     });
-    if (error) throw toHttpError(error.message);
+    if (error) throw toHttpError(error.message, error.code);
     const r = data as { status: string; elapsedMs: number; timing: string };
     return json({ status: r.status, elapsedMs: r.elapsedMs, timing: r.timing }, r.status === "accepted" ? 201 : 200);
   });

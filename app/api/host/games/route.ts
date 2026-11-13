@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       p_title: parsed.value.title,
       p_items: parsed.value.items,
     });
-    if (error || !data?.[0]) throw toHttpError(error?.message ?? "");
+    if (error || !data?.[0]) throw toHttpError(error?.message ?? "", error?.code);
     return json({ id: data[0].game_id, code: data[0].code }, 201);
   });
 }

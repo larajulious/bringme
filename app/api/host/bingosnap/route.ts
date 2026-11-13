@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       p_game: null, p_expected_revision: 0, p_title: v.title, p_board_size: v.boardSize, p_win_mode: v.winMode,
       p_free_space: v.freeSpace, p_duration_seconds: v.durationSeconds, p_winner_rule: v.winnerRule, p_cells: v.cells, p_publish: v.publish,
     });
-    if (error || !data) throw toBingoHttpError(error?.message ?? "");
+    if (error || !data) throw toBingoHttpError(error?.message ?? "", error?.code);
     const state = data as { gameId: string; joinCode: string };
     return json({ id: state.gameId, code: state.joinCode, state }, 201);
   });

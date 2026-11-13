@@ -246,6 +246,45 @@ describe("SubmissionFlow: duplicates, delays, retries, races", () => {
     assert.equal(flow.current.kind, "accepted");
   });
 
+  it("'database busy' on complete retries ONLY complete: no second begin, no re-upload", async () => {
+    let c = 0;
+    const metas: unknown[] = [];
+    const { flow, log } = make({ complete: async (x) => { log.completes++; metas.push(x.meta.uploadAttempts); if (c++ === 0) throw new SubmitError("db_busy", true); return { status: "accepted", elapsedMs: 3000, timing: "consistent" }; } });
+    flow.start(input(), blob());
+    await settle(flow);
+    assert.equal(flow.current.kind, "accepted");
+    assert.deepEqual([log.begins, log.uploads, log.completes], [1, 1, 2]);
+    assert.deepEqual(log.sleeps, [500]);
+    assert.deepEqual(metas, [1, 1], "still one upload");
+  });
+
+  it("'database busy' on begin retries begin (nothing was stored yet)", async () => {
+    let b = 0;
+    const { flow, log } = make({ begin: async () => { log.begins++; if (b++ === 0) throw new SubmitError("db_busy", true); return { status: "ready", uploadUrl: "u" }; } });
+    flow.start(input(), blob());
+    await settle(flow);
+    assert.equal(flow.current.kind, "accepted");
+    assert.deepEqual([log.begins, log.uploads, log.completes], [2, 1, 1]);
+  });
+
+  it("any other retryable complete failure still starts over from begin (fresh upload URL)", async () => {
+    let c = 0;
+    const { flow, log } = make({ complete: async () => { log.completes++; if (c++ === 0) throw new SubmitError("network", true); return { status: "duplicate", elapsedMs: 3000, timing: "consistent" }; } });
+    flow.start(input(), blob());
+    await settle(flow);
+    assert.equal(flow.current.kind, "accepted");
+    assert.deepEqual([log.begins, log.uploads, log.completes], [2, 2, 2]);
+  });
+
+  it("'database busy' on every try ends in a retryable failure after the automatic retries", async () => {
+    const { flow, log } = make({ complete: async () => { log.completes++; throw new SubmitError("db_busy", true); } });
+    flow.start(input(), blob());
+    await settle(flow);
+    assert.equal(flow.current.kind, "failed");
+    assert.ok(flow.current.kind === "failed" && flow.current.retryable && !flow.current.canRecapture);
+    assert.deepEqual([log.begins, log.uploads, log.completes], [1, 1, 3]);
+  });
+
   it("two simultaneous manual retries run once (single flight)", async () => {
     let down = true;
     const { flow, log } = make({ upload: async () => { if (down) throw new SubmitError("network", true); await new Promise((r) => setTimeout(r, 20)); } });

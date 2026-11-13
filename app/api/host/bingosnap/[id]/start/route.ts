@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!parsed.ok) throw new HttpError(400, parsed.error);
 
     const { data, error } = await supabase.rpc("bingo_start", { p_game: id, p_expected_version: parsed.value.expectedVersion });
-    if (error) throw toBingoHttpError(error.message);
+    if (error) throw toBingoHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

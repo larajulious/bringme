@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!decision) throw new HttpError(400, "invalid_decision");
 
     const { data, error } = await supabase.rpc("review_submission", { p_submission: submissionId, p_decision: decision });
-    if (error) throw toHttpError(error.message);
+    if (error) throw toHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       p_decision: parsed.value.decision,
       p_reason: parsed.value.reason ?? undefined,
     });
-    if (error) throw toBingoHttpError(error.message);
+    if (error) throw toBingoHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

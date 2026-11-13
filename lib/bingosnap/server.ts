@@ -16,7 +16,7 @@ import type { BingoPlayerSnapshot, BingoRoomInfo } from "./types";
 export async function getBingoPlayerState(token: string | undefined): Promise<BingoPlayerSnapshot | null> {
   if (!isWellFormedToken(token)) return null;
   const { data, error } = await createAdminClient().rpc("bingo_player_state", { p_token_hash: hashToken(token) });
-  if (error) throw error.message.includes("wrong_game_type") ? toBingoHttpError(error.message) : new HttpError(500, "state_lookup_failed");
+  if (error) throw error.message.includes("wrong_game_type") ? toBingoHttpError(error.message, error.code) : new HttpError(500, "state_lookup_failed");
   return (data as unknown as BingoPlayerSnapshot | null) ?? null;
 }
 
@@ -44,6 +44,6 @@ export async function getBingoRoomInfo(code: string): Promise<BingoRoomInfo | nu
 /** Records a claim (cell ids only) and returns the participant's new snapshot. */
 export async function submitBingoClaim(tokenHash: string, cellIds: string[], requestId: string | null): Promise<BingoPlayerSnapshot> {
   const { data, error } = await createAdminClient().rpc("bingo_submit_claim", { p_token_hash: tokenHash, p_cell_ids: cellIds, p_request_id: requestId });
-  if (error) throw toBingoHttpError(error.message);
+  if (error) throw toBingoHttpError(error.message, error.code);
   return data as unknown as BingoPlayerSnapshot;
 }

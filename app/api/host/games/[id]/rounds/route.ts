@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (prompt.length > ITEM_MAX_LENGTH) throw new HttpError(400, "invalid_item");
 
     const { data, error } = await supabase.rpc("add_game_round", { p_game: id, p_prompt: prompt });
-    if (error) throw toHttpError(error.message);
+    if (error) throw toHttpError(error.message, error.code);
     return json({ state: data });
   });
 }

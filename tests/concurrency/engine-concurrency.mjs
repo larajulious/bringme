@@ -201,6 +201,137 @@ async function reviewingGame() {
   const states = (await admin.query("select status from public.submissions where round_id=$1", [g.round])).rows.map((r) => r.status);
   check("concurrent review decisions never corrupt state (each photo ends in a valid status)", outs.every((o) => o.status === "fulfilled") && states.every((x) => ["pending", "approved", "rejected"].includes(x)) && states.length === 2); }
 
+// ---------- Audit G1: submissions from DIFFERENT players of one game (migration 20261113000001)
+// Before the fix, complete_submission held the game row FOR SHARE and then UPDATEd it (state_version):
+// two players doing that at once deadlocked (40P01 after deadlock_timeout). Each call runs on its own
+// connection with a statement timeout, and every outcome (ok / deadlock / timeout / other) is counted.
+const TIMEOUT_MS = 20_000;
+async function timedParallel(n, fn) {
+  const conns = await Promise.all(Array.from({ length: n }, conn));
+  await Promise.all(conns.map(async (c) => { await asSvc(c); await c.query(`set statement_timeout = ${TIMEOUT_MS}`); }));
+  const t0 = Date.now();
+  const out = await Promise.allSettled(conns.map(async (c, i) => { const s = Date.now(); const r = await fn(c, i); return { r, ms: Date.now() - s }; }));
+  const wall = Date.now() - t0;
+  await Promise.all(conns.map((c) => c.end()));
+  const tally = { ok: 0, deadlock: 0, timeout: 0, other: 0 }; const others = new Set(); let slowest = 0;
+  for (const o of out) {
+    if (o.status === "fulfilled") { tally.ok++; slowest = Math.max(slowest, o.value.ms); continue; }
+    const code = o.reason.code;
+    if (code === "40P01") tally.deadlock++; else if (code === "57014") tally.timeout++; else { tally.other++; others.add(o.reason.message.slice(0, 50)); }
+  }
+  return { out, tally, wall, slowest, others: [...others] };
+}
+const fmt = (t) => `ok=${t.tally.ok} deadlock=${t.tally.deadlock} timeout=${t.tally.timeout} other=${t.tally.other}${t.others.length ? " " + JSON.stringify(t.others) : ""} wall=${t.wall}ms slowest=${t.slowest}ms`;
+const META = '{"syncRttMs":30,"syncAgeMs":500}';
+async function begunRound(n) {
+  const g = await activeRound(Array.from({ length: n }, (_, i) => "P" + i));
+  const atts = g.hashes.map(() => crypto.randomUUID());
+  for (let i = 0; i < n; i++) { await asSvc(admin); await admin.query(`select public.begin_submission($1,$2,$3,$4,'${META}')`, [g.hashes[i], g.round, atts[i], 1000 + i * 10]); }
+  await admin.query("reset role");
+  return { ...g, atts };
+}
+
+for (const n of [2, 10, 30, 50]) {
+  const g = await begunRound(n); const v0 = await ver(g.id);
+  const res = await timedParallel(n, (c, i) => c.query("select public.complete_submission($1,$2,$3,'{}') r", [g.hashes[i], g.round, g.atts[i]]));
+  const accepted = res.out.filter((o) => o.status === "fulfilled" && o.value.r.rows[0].r.status === "accepted").length;
+  const rows = (await admin.query("select s.claimed_elapsed_ms c, s.server_elapsed_ms sv, s.rank_ms rk, s.timing_status t from public.submissions s where s.round_id=$1 order by s.claimed_elapsed_ms", [g.round])).rows;
+  const v1 = await ver(g.id);
+  // timing untouched: each claim kept its tap-time value, and the ranking rule (flagged -> server time) still applies
+  const timingOk = rows.every((r, i) => r.c === 1000 + i * 10 && r.rk === (r.t === "flagged" ? Math.max(r.sv, 0) : Math.max(r.c, 0)));
+  check(`${n} DIFFERENT players complete at the same instant: all accepted first try, no deadlock/timeout, ${n} rows, version +${n}, timing kept`,
+    accepted === n && res.tally.ok === n && rows.length === n && v1 - v0 === n && timingOk, fmt(res));
+}
+
+{ // realistic mix: half the players finishing, half tapping (begin), all at once
+  const n = 30; const g = await activeRound(Array.from({ length: n }, (_, i) => "M" + i));
+  const atts = g.hashes.map(() => crypto.randomUUID());
+  for (let i = 0; i < n / 2; i++) { await asSvc(admin); await admin.query(`select public.begin_submission($1,$2,$3,1500,'${META}')`, [g.hashes[i], g.round, atts[i]]); }
+  await admin.query("reset role");
+  const res = await timedParallel(n, (c, i) => i < n / 2
+    ? c.query("select public.complete_submission($1,$2,$3,'{}')", [g.hashes[i], g.round, atts[i]])
+    : c.query(`select public.begin_submission($1,$2,$3,1800,'${META}')`, [g.hashes[i], g.round, atts[i]]));
+  check("15 completes + 15 begins of different players at once: no deadlock/timeout, 15 submissions, 30 intents",
+    res.tally.ok === n && (await countRows("submissions", "round_id=$1", [g.round])) === n / 2 && (await countRows("submission_intents", "round_id=$1", [g.round])) === n, fmt(res));
+}
+
+// Deterministic interleaving: the host's action is queued on the game row FIRST, then the player's request arrives.
+async function waitUntilBlocked(pid) {
+  for (let i = 0; i < 200; i++) {
+    const w = (await admin.query("select wait_event_type from pg_stat_activity where pid=$1", [pid])).rows[0]?.wait_event_type;
+    if (w === "Lock") return true;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return false;
+}
+async function hostFirstThenPlayer(gameId, hostSql, hostArgs, playerSql, playerArgs) {
+  const blocker = await conn(); await blocker.query("begin"); await blocker.query("select 1 from public.games where id=$1 for update", [gameId]);
+  const host = await conn(); await asUser(host, hostId); await host.query(`set statement_timeout = ${TIMEOUT_MS}`);
+  const player = await conn(); await asSvc(player); await player.query(`set statement_timeout = ${TIMEOUT_MS}`);
+  const hostPid = (await host.query("select pg_backend_pid() p")).rows[0].p;
+  const playerPid = (await player.query("select pg_backend_pid() p")).rows[0].p;
+  const hp = host.query(hostSql, hostArgs).then(() => "ok", (e) => e.code ?? e.message);
+  await waitUntilBlocked(hostPid);
+  const pp = player.query(playerSql, playerArgs).then(() => "ok", (e) => e.code ?? e.message);
+  await waitUntilBlocked(playerPid);
+  await blocker.query("commit"); await blocker.end();
+  const [h, p] = await Promise.all([hp, pp]);
+  await host.end(); await player.end();
+  return { host: h, player: p };
+}
+
+{ // The winner's phone retries 'complete' (lost response) exactly while the host announces them as the winner.
+  // announce_winner writes game_rounds.winner_player_id -> FK check takes KEY SHARE on that player's row.
+  const g = await reviewingGame(); const v = await ver(g.id);
+  const annHash = g.hashes[0];
+  const att = (await admin.query("select attempt_id a from public.submissions where player_id=$1", [g.ann])).rows[0].a;
+  const r = await hostFirstThenPlayer(g.id, "select public.game_transition($1,'announce_winner',$2,$3)", [g.id, v, g.ann],
+    "select public.complete_submission($1,$2,$3,'{}')", [annHash, g.round, att]);
+  check("winner's retried 'complete' while the host announces them: both succeed, no deadlock", r.host === "ok" && r.player === "ok", JSON.stringify(r));
+}
+
+{ // Same, for a late 'begin' (resume of an upload) while the host announces that player.
+  const g = await reviewingGame(); const v = await ver(g.id);
+  const r = await hostFirstThenPlayer(g.id, "select public.game_transition($1,'announce_winner',$2,$3)", [g.id, v, g.ann],
+    "select public.begin_submission($1,$2,$3,1000,'{}')", [g.hashes[0], g.round, crypto.randomUUID()]);
+  check("winner's late 'begin' while the host announces them: both succeed, no deadlock", r.host === "ok" && r.player === "ok", JSON.stringify(r));
+}
+
+{ // Completes racing the host removing OTHER players and removing a player who is completing.
+  const n = 12; const g = await begunRound(n);
+  const kicked = [0, 1, 2]; // 0..2 are completing AND being removed; the rest only complete
+  const ids = (await admin.query("select id from public.players where token_hash = any($1) order by array_position($1, token_hash)", [g.hashes])).rows.map((r) => r.id);
+  const hostConnsK = await Promise.all(kicked.map(async () => { const c = await conn(); await asUser(c, hostId); return c; }));
+  const [res, kicks] = await Promise.all([
+    timedParallel(n, (c, i) => c.query("select public.complete_submission($1,$2,$3,'{}')", [g.hashes[i], g.round, g.atts[i]])),
+    Promise.allSettled(hostConnsK.map((c, k) => c.query("update public.players set kicked_at = now() where id=$1 and game_id=$2", [ids[kicked[k]], g.id]))),
+  ]);
+  await Promise.all(hostConnsK.map((c) => c.end()));
+  const clean = res.out.every((o) => o.status === "fulfilled" || /player_removed/.test(o.reason.message));
+  check("12 completes racing 3 removals: no deadlock/timeout; a removed player is either accepted first or refused 'player_removed'",
+    res.tally.deadlock === 0 && res.tally.timeout === 0 && clean && kicks.every((k) => k.status === "fulfilled"), fmt(res));
+}
+
+{ // Completes racing 'close submissions' and host review decisions on already accepted photos.
+  const n = 20; const g = await begunRound(n);
+  const early = 5;
+  for (let i = 0; i < early; i++) { await asSvc(admin); await admin.query("select public.complete_submission($1,$2,$3,'{}')", [g.hashes[i], g.round, g.atts[i]]); }
+  await admin.query("reset role");
+  const subs = (await admin.query("select id from public.submissions where round_id=$1", [g.round])).rows.map((r) => r.id);
+  const reviewers = await Promise.all(subs.map(async () => { const c = await conn(); await asUser(c, hostId); return c; }));
+  const closer = await conn(); await asUser(closer, hostId);
+  const [res, reviews, close] = await Promise.all([
+    timedParallel(n - early, (c, i) => c.query("select public.complete_submission($1,$2,$3,'{}')", [g.hashes[early + i], g.round, g.atts[early + i]])),
+    Promise.allSettled(reviewers.map((c, i) => c.query("select public.review_submission($1,'approve')", [subs[i]]))),
+    closer.query("select public.game_transition($1,'close_submissions',$2,null)", [g.id, await ver(g.id)]).then(() => "ok", (e) => e.message),
+  ]);
+  await Promise.all([...reviewers.map((c) => c.end()), closer.end()]);
+  const badReview = reviews.filter((r) => r.status === "rejected" && r.reason.code === "40P01").length;
+  check("15 completes racing 5 review decisions and 'close submissions': no deadlock/timeout anywhere",
+    res.tally.deadlock === 0 && res.tally.timeout === 0 && res.tally.other === 0 && badReview === 0 && (close === "ok" || /stale_state/.test(close)),
+    `${fmt(res)} reviews=${reviews.filter((r) => r.status === "fulfilled").length}/${reviews.length} close=${close}`);
+}
+
 // ---------- Game Pass ledger under concurrency (migrations 20261112000001..7)
 await admin.query("reset role");
 await admin.query("update public.plan_prices pp set polar_product_id = 'prod_' || p.code || '_' || pp.currency from public.subscription_plans p where p.id = pp.plan_id and not p.is_trial");

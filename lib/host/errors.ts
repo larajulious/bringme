@@ -1,7 +1,17 @@
+import { DB_BUSY, isTransientDbError } from "@/lib/api/db-errors";
 import { HttpError } from "@/lib/api/http";
 
-/** Maps database trigger/RPC messages (Phase 2–5) to stable HTTP errors. */
-export function toHttpError(message: string): HttpError {
+/**
+ * Maps database trigger/RPC messages (Phase 2–5) to stable HTTP errors.
+ * `code` (the PostgreSQL/PostgREST error code) identifies transient failures (deadlock, lock or
+ * statement timeout, busy pool): those become 503 `db_busy`, which clients retry. Only the code is
+ * logged, never the message or details (they can contain query text and row values).
+ */
+export function toHttpError(message: string, code?: string | null): HttpError {
+  if (isTransientDbError(code)) {
+    console.warn("[db] transient error (client may retry)", JSON.stringify({ code }));
+    return new HttpError(503, DB_BUSY);
+  }
   const rules: [string, number, string][] = [
     ["subscription_required", 402, "subscription_required"],
     ["period_game_limit_reached", 409, "period_game_limit_reached"],

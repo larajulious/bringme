@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const view = request.nextUrl.searchParams.get("view") === "presenter" ? "presenter" : "host";
 
     const { data, error } = await supabase.rpc("bingo_host_state", { p_game: id, p_view: view });
-    if (error) throw toBingoHttpError(error.message);
+    if (error) throw toBingoHttpError(error.message, error.code);
     return json(data);
   });
 }

@@ -63,6 +63,10 @@ Before 13–26 run [`inspect/game_pass_preflight.sql`](inspect/game_pass_preflig
 33. `20261112000029_disposable_email_guard.sql` — `disposable_email_domains` (active blocklist), `disposable_email_allowlist`, `disposable_email_list_versions` (snapshots), `is_disposable_email`, the Auth hook `hook_before_user_created`, and service-role `apply_disposable_email_list` / `rollback_disposable_email_list` / `disposable_email_list_status`. No existing object changes
 34. `20261112000030_disposable_email_seed.sql` — allowlist (major providers + privacy relays) and the upstream list (10,181 domains, commit `ba992a0`) as version 1; does nothing once any version exists. Revert both: [`rollback/20261112000029_30_disposable_email_revert.sql`](rollback/20261112000029_30_disposable_email_revert.sql) (turn the hook off first)
 
+**Concurrency fix** (audit G1, [BRINGME_SUPABASE_AUDIT.md](../BRINGME_SUPABASE_AUDIT.md)).
+
+35. `20261113000001_submission_lock_order.sql` — `begin_submission` / `complete_submission`: lock clauses only (game row `FOR NO KEY UPDATE` in complete; player row `FOR NO KEY UPDATE` in both). Removes the deadlock between players submitting at the same time. Same signatures and grants; re-runnable. Revert: [`rollback/20261113000001_submission_lock_order_revert.sql`](rollback/20261113000001_submission_lock_order_revert.sql) (brings the deadlock back). Requires 10; safe after 30
+
 ## Apply to the existing Supabase project
 
 ```bash

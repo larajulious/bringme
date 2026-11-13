@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       p_expected_version: parsed.value.expectedVersion,
       p_winner_submission: parsed.value.winnerSubmissionId ?? undefined,
     });
-    if (error) throw toBingoHttpError(error.message);
+    if (error) throw toBingoHttpError(error.message, error.code);
     return json({ state: data });
   });
 }
