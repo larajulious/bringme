@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CameraGate } from "@/components/game/camera-gate";
 import { Confetti } from "@/components/game/confetti";
+import { FullscreenButton } from "@/components/game/fullscreen-button";
 import { WaitingDots } from "@/components/game/waiting-dots";
 import { useCamera } from "@/components/game/camera-context";
 import { ITEM_WRAP, itemSize } from "@/components/game/item-text";
@@ -226,11 +227,15 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
             <p className="rounded-full bg-white/12 px-3 py-0.5 text-xs font-bold uppercase tracking-widest text-white/85">Bring me…</p>
             <p className="truncate text-xs text-white/60" role="status">{connection}</p>
           </div>
-          <div className="shrink-0 text-right">
+          <div className="flex shrink-0 items-start gap-2">
+          {/* The round screen covers the page header, so it carries its own fullscreen toggle. */}
+          <FullscreenButton compact className="mt-0.5" />
+          <div className="text-right">
             <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-white/70">
               <span aria-hidden="true" className={cn("size-2 rounded-full bg-brand-coral", finalMs === null && stoppedMs === null && "animate-pulse motion-reduce:animate-none")} /> Elapsed
             </p>
             <p ref={timerRef} role="timer" aria-label="Elapsed time" className="rounded-2xl bg-white/10 px-3 py-1 font-mono text-2xl font-bold tabular-nums min-[375px]:text-3xl tiny:text-2xl">00.000</p>
+          </div>
           </div>
         </div>
         <div className="max-h-[30dvh] overflow-y-auto overscroll-contain landscape:tiny:max-h-[24dvh]">

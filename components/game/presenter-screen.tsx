@@ -1,7 +1,7 @@
 "use client";
 
 import { DoorClosed, Expand, Link2Off, Minimize, Users } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
 import { Logo } from "@/components/brand/logo";
@@ -270,9 +270,9 @@ function FinalScreen({ s, photos }: { s: HostSnapshot; photos: { no: number; pho
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photo} alt={`Winning photo, round ${r.no}`} className="size-[min(7rem,80cqh)] shrink-0 -rotate-2 rounded-xl [border-width:min(4px,3cqh)] border-white bg-black object-cover shadow-card" />
                 ) : null}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[min(1.5rem,22cqh,6cqw)] leading-tight text-white/80" title={r.prompt}>{r.prompt}</p>
-                  <p className="truncate font-display text-[min(3rem,36cqh,9cqw)] font-bold leading-tight text-brand-yellow" title={r.winnerName ?? "No winner"}>{r.winnerName ?? "No winner"}</p>
+                <div className="flex h-full min-w-0 flex-1 flex-col justify-center">
+                  <FitText text={r.prompt} className="text-[calc(min(1.5rem,22cqh,6cqw)*var(--fit,1))] leading-tight text-white/80" />
+                  <p className="shrink-0 truncate font-display text-[min(3rem,36cqh,9cqw)] font-bold leading-tight text-brand-yellow" title={r.winnerName ?? "No winner"}>{r.winnerName ?? "No winner"}</p>
                 </div>
                 {r.winnerMs !== null ? <p className="shrink-0 font-mono text-[min(3rem,32cqh,8cqw)] font-bold tabular-nums">{formatElapsed(r.winnerMs)}</p> : null}
               </div>
@@ -281,6 +281,45 @@ function FinalScreen({ s, photos }: { s: HostSnapshot; photos: { no: number; pho
         })}
       </ol>
     </div>
+  );
+}
+
+/**
+ * A round's item on the final screen, never cut to one line: it wraps, and if it still doesn't fit the space its
+ * row leaves it, the font steps down (via `--fit`) until it does. Short items keep their full size. Measured, not
+ * animated. Only if an extreme item still can't fit at the smallest readable size does it end in "…" (full text
+ * in the tooltip), so it can never spill over the next row.
+ */
+function FitText({ text, className }: { text: string; className: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const fit = () => {
+      el.style.webkitLineClamp = "";
+      el.style.setProperty("--fit", "1");
+      let k = 1;
+      while (k > 0.5 && el.scrollHeight > el.clientHeight + 1) {
+        k = Math.round((k - 0.05) * 100) / 100;
+        el.style.setProperty("--fit", String(k));
+      }
+      if (el.scrollHeight > el.clientHeight + 1) {
+        const line = parseFloat(getComputedStyle(el).lineHeight) || 1;
+        el.style.webkitLineClamp = String(Math.max(1, Math.floor(el.clientHeight / line)));
+      }
+    };
+    fit();
+    // The row's size (not the text) drives it, so refitting can't loop. Fonts arriving late change the metrics.
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    void document.fonts?.ready.then(fit);
+    return () => ro.disconnect();
+  }, [text]);
+  return (
+    <p ref={ref} title={text} className={cn("min-h-0 shrink overflow-hidden break-words [display:-webkit-box] [overflow-wrap:anywhere] [-webkit-box-orient:vertical]", className)}>
+      {text}
+    </p>
   );
 }
 
