@@ -1,29 +1,36 @@
 import { POSES, REF_H, cycleLength, mix, runPose, withFace, type Face, type Kind, type Placement, type Pose, type PoseName } from "./rig";
 
 /* ------------------------------------------------------------------------------------------------
- * The story, as one timeline for the whole page. Positions are viewport fractions (x of width, ground g
- * and height h of height): Snappy lives in screen space and the sections slide over him like windows.
- * This file is only *where* Snappy is and what he's doing; *how* his body runs, blinks or
- * squashes lives in rig.ts. Both are pure functions of scroll, so scrubbing backwards replays exactly.
+ * The story, as four self-contained beats (tablet and desktop). Each belongs to one section and is drawn on that
+ * section's own layer, so it scrolls with the page on the compositor and can never lag behind it. Scroll only
+ * *triggers* a beat; the beat itself plays on the clock (seconds), so Snappy runs at the same natural speed however
+ * fast the visitor scrolls. A beat plays 0 → `hold` when its section comes into view, waits there (breathing,
+ * waving) while it stays in view, and plays `hold` → `end` (his exit) when it goes. He never crosses from one
+ * section into another, and never passes over a heading. This file is only *where* Snappy is and what he's doing;
+ * *how* his body runs, blinks or squashes lives in rig.ts.
  *
- * Story time τ is pinned to the layout, not to raw scroll: τ = k when section k's top edge (1 how it
- * works, 2 who it's for, 3 extra fun, 4 pricing) crosses his eye line. Section edges are where
- * the page has negative space (padding, centred headings), so every visible beat sits in the window
- * τ = k ± 0.3; between windows (behind cards) time compresses. See engine.ts `measure()`.
+ *  hero      He peeks in from the right on the hero's bottom edge, crouches, loaded, and when the visitor
+ *            starts scrolling, launches and sprints out the left.
+ *  audience  He runs in from the left, brakes beside "Who is it for?", puts his stapler hand up ("me!") and
+ *            waves, and runs back out the left.
+ *  extra     Same for "Extra Fun", from the right: he waves hi.
+ *  pricing   On the footer's edge at the end of the page: he runs in from the left, frames the shot, fires his
+ *            flash (a held beat) and throws both arms up.
  *
- *  0.0–0.6  Anticipation  Snappy peeks in from the hero edge, eyes the route and crouches, loaded.
- *  0.6–2.3  The run       He launches, accelerates away into depth and sprints out of frame.
- *  2.7–3.1  The return    He's back, far off, running the other way; he flashes us a happy glance,
- *                         then narrows his eye and digs in.
- *  3.1–4.4  The moment    He brakes hard, turns and charges toward us, growing to full size, frames the
- *                         shot and fires his flash: a held beat.
- *  4.4–5.0  The finish    He throws both arms up and holds, breathing, above the footer.
- *
- * Phones don't get the run (no lane on a phone stays clear of the content). Instead, once the visitor
- * reaches the end, Snappy sneaks up from behind the footer's torn edge: see `sneak`.
+ * Positions are viewport fractions (x of width, h = height of height); y is the section's ground line in px
+ * (set by the engine). Phones don't get these beats (no lane on a phone stays clear of the content). Instead, once
+ * the visitor reaches the end, Snappy sneaks up from behind the footer's torn edge: see `sneak`.
  * ---------------------------------------------------------------------------------------------- */
 
-export type Layout = { vw: number; vh: number; mobile: boolean; /** ground line that clears the footer at the end */ gEnd: number };
+/** A section's heading + intro text: left and right edges (fractions of width), and the room above its ground line
+ * (px) for his head and raised hand. */
+export type Spot = { l: number; r: number; head: number };
+
+export type Layout = {
+  vw: number; vh: number; mobile: boolean;
+  /** Where Snappy greets "Who is it for?" and "Extra Fun" from (measured from their heading + intro). */
+  spots: Record<"audience" | "extra", Spot>;
+};
 
 type Ease = "linear" | "in" | "out" | "inout";
 type Range = [number, number];
@@ -38,8 +45,12 @@ type Seg = {
   settle?: { pose: PoseName; from: number };
   /** An expression played over the segment (eased in and out), e.g. a glance or the flash. */
   face?: Face;
+  /** Waves the raised (stapler) hand on the clock, easing in over the segment ("in", then held) or out ("out"). */
+  wave?: "in" | "out";
 };
 export type Track = { kind: Kind; segs: Seg[]; phase0: number[]; cycle: number };
+export type BeatName = "hero" | "audience" | "extra" | "pricing";
+export type Beat = { track: Track; /** where it waits while its section is in view (s) */ hold: number; /** fully exited (s) */ end: number };
 
 const ease = {
   linear: { f: (p: number) => p, d: () => 1 },
@@ -52,56 +63,66 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const lerp = (r: Range, e: number) => r[0] + (r[1] - r[0]) * e;
 const hold = (v: number): Range => [v, v];
 
-/** Splits one constant-speed run into consecutive parts (same path, unbroken stride) so each can carry a face. */
-function parts(base: Seg, cuts: { to: number; face?: Face }[]): Seg[] {
-  let t0 = base.t[0];
-  const at = (t: number, r: Range) => lerp(r, (t - base.t[0]) / (base.t[1] - base.t[0]));
-  return cuts.map(({ to, face }, i) => {
-    const seg: Seg = {
-      ...base, t: [t0, to], face,
-      x: [at(t0, base.x), at(to, base.x)], g: [at(t0, base.g), at(to, base.g)], h: [at(t0, base.h), at(to, base.h)], z: [at(t0, base.z), at(to, base.z)],
-      run: i > 0 ? { lean: base.run!.lean } : base.run,
-    };
-    t0 = to;
-    return seg;
-  });
+/* ------------------------------------------- the beats ------------------------------------------- */
+
+/** Half his width (fraction of vw) at height h (fraction of vh). */
+const halfW = (l: Layout, h: number) => (66 * h * l.vh) / REF_H / l.vw;
+/** Just past the screen edge on a side (−1 left, 1 right). */
+const offEdge = (l: Layout, h: number, side: number) => (side > 0 ? 1 + halfW(l, h) + 0.03 : -halfW(l, h) - 0.03);
+const at = (x: number, h: number, f: number) => ({ x: hold(x), g: hold(0), h: hold(h), z: hold(1), f: hold(f) });
+const glance: Face = { look: 0, lookY: 0.15, pupil: 1.12, smile: 1, open: 0.45 }; // a happy glance at us
+
+/**
+ * A greeting beside a section's heading + intro (side 1 = right of it, −1 = left; he faces the text), so he never
+ * passes behind it: in from the screen edge on that side, the greeting, and back out the same way. On narrow
+ * screens, or with little room above the line for his head and raised hand, he's drawn smaller.
+ */
+function greet(l: Layout, spot: Spot, side: 1 | -1): Beat {
+  const room = Math.max(0, side > 0 ? 1 - 0.02 - (spot.r + 0.03) : spot.l - 0.03 - 0.02) / 2; // half-width, fraction of vw
+  const fitHead = (spot.head / 165) * REF_H / l.vh; // raised hand ~165 figure units above his feet
+  const h = Math.min(0.24, fitHead, Math.max(0.08, (room * l.vw * REF_H) / (66 * l.vh)));
+  const half = halfW(l, h);
+  const x = side > 0 ? Math.min(1 - half - 0.02, Math.max(0.62, spot.r + 0.03 + half)) : Math.max(half + 0.02, Math.min(0.38, spot.l - 0.03 - half));
+  const f = -side;
+  const off = offEdge(l, h, side);
+  const mid = x - 0.07 * f; // braking starts here
+  const segs: Seg[] = [
+    { t: [0, 0.42], run: { lean: [16, 14] }, ...at(0, h, f), x: [off, mid] },
+    { t: [0.42, 0.62], run: { lean: [12, -4] }, settle: { pose: "skid", from: 0.3 }, ...at(0, h, f), x: [mid, x], ease: "out" },
+    { t: [0.62, 0.82], pose: ["skid", "hi"], ...at(x, h, f), wave: "in" },
+    { t: [0.82, 0.98], pose: ["hi", "stand"], ...at(x, h, f), f: [f, -f], wave: "out" },
+    { t: [0.98, 1.45], run: { lean: [18, 16] }, blend: 0.3, ...at(0, h, -f), x: [x, off], ease: "in", face: glance },
+  ];
+  return { track: buildTrack(segs, l), hold: 0.82, end: 1.45 };
 }
 
-/* ------------------------------------------- the script ------------------------------------------- */
-
-/** The run through the page (tablet and desktop; phones get the sneak at the end instead, see `sneak`). */
-function script(l: Layout): Record<Kind, Seg[]> {
-  const near = l.gEnd; // the stage floor for the moment and the finish
-  const far = near - 0.12; // a plane further back (higher on screen, smaller)
-  const H = { hero: 0.44, run: 0.26, far: 0.19, a: 0.31 };
-  const X = { edge: [1.04, 0.965], launch: 0.42, out: -0.2, aIn: -0.14, aRun: 0.5, aBrake: 0.565, aEnd: 0.115 };
-  const at = (x: number, g: number, h: number, z: number, f: number) => ({ x: hold(x), g: hold(g), h: hold(h), z: hold(z), f: hold(f) });
-  const A = at(X.aEnd, near, H.a, 1, 1);
-
-  const raceA: Seg = { t: [2.7, 3.12], run: { lean: [15, 15] }, ...at(0, far, H.far, 0.15, 1), x: [X.aIn, X.aRun] };
-
-  const a: Seg[] = [
-    { t: [0, 0.6], pose: ["ready", "set"], ...at(0, 1, H.hero, 1, -1), x: [X.edge[0], X.edge[1]], ease: "inout" },
-    { t: [0.6, 1.3], run: { lean: [24, 16], phase0: 0.8 }, blend: 0.22, x: [X.edge[1], X.launch], g: [1, 0.9], h: [H.hero, H.run], z: [1, 0.7], f: hold(-1), ease: "in" },
-    { t: [1.3, 2.3], run: { lean: [16, 16] }, ...at(0, 0.9, H.run, 0.7, -1), x: [X.launch, X.out] },
-    // offscreen: turn round and step back into the distance
-    { t: [2.3, 2.7], pose: ["stand", "stand"], ...at(X.aIn - 0.12, far, H.far, 0.15, 1) },
-    ...parts(raceA, [
-      { to: 2.84 },
-      { to: 2.98, face: { look: 0, lookY: 0.15, pupil: 1.12, smile: 1, open: 0.45 } }, // a happy glance at us
-      { to: 3.12, face: { lid: 0.32, smirk: 0.8, smile: 0.5, open: 0, look: 1, pupil: 0.9 } }, // eyes front, digs in
-    ]),
-    { t: [3.12, 3.32], run: { lean: [12, -4] }, settle: { pose: "skid", from: 0.3 }, ...at(0, far, H.far, 0.15, 1), x: [X.aRun, X.aBrake], ease: "out" },
-    { t: [3.32, 3.55], pose: ["skid", "stand"], ...at(X.aBrake, far, H.far, 0.15, 1), f: [1, -1], ease: "inout", face: { look: -1, pupil: 1.15 } },
-    { t: [3.55, 4.05], run: { lean: [20, 8] }, blend: 0.25, settle: { pose: "stand", from: 0.78 }, x: [X.aBrake, X.aEnd], g: [far, near], h: [H.far, H.a], z: [0.15, 1], f: hold(-1), ease: "inout" },
-    { t: [4.05, 4.15], pose: ["stand", "snap"], ...A, f: [-1, 1], ease: "inout" },
-    { t: [4.15, 4.3], pose: ["snap", "snap"], ...A, face: { flash: 1, lid: 0.55, smile: 0.9 } }, // click
-    { t: [4.3, 4.4], pose: ["snap", "snap"], ...A }, // the held beat
-    { t: [4.4, 4.6], pose: ["snap", "victory"], ...A, ease: "inout" },
-    { t: [4.6, 5], pose: ["victory", "victory"], ...A },
+export function buildBeats(l: Layout): Record<BeatName, Beat> {
+  const heroH = 0.44;
+  const heroOff = offEdge(l, heroH * 0.8, -1);
+  const hero: Seg[] = [
+    // peeks in from the right, eyes the route and crouches, loaded
+    { t: [0, 0.7], pose: ["ready", "set"], ...at(0, heroH, -1), x: [1.04, 0.965], ease: "inout" },
+    // ...and launches, sprinting out the left
+    { t: [0.7, 1.9], run: { lean: [24, 16], phase0: 0.8 }, blend: 0.22, ...at(0, 0, -1), x: [0.965, heroOff], h: [heroH, heroH * 0.8], ease: "in" },
   ];
-
-  return { a };
+  const aH = 0.31, aEnd = 0.115;
+  const finOff = offEdge(l, aH, -1);
+  const fin: Seg[] = [
+    { t: [0, 0.5], run: { lean: [16, 14] }, ...at(0, aH, 1), x: [finOff, aEnd - 0.07] },
+    { t: [0.5, 0.7], run: { lean: [12, -4] }, settle: { pose: "stand", from: 0.3 }, ...at(0, aH, 1), x: [aEnd - 0.07, aEnd], ease: "out" },
+    { t: [0.7, 0.9], pose: ["stand", "snap"], ...at(aEnd, aH, 1), ease: "inout" },
+    { t: [0.9, 1.15], pose: ["snap", "snap"], ...at(aEnd, aH, 1), face: { flash: 1, lid: 0.55, smile: 0.9 } }, // click
+    { t: [1.15, 1.35], pose: ["snap", "snap"], ...at(aEnd, aH, 1) }, // the held beat
+    { t: [1.35, 1.6], pose: ["snap", "victory"], ...at(aEnd, aH, 1), ease: "inout" },
+    { t: [1.6, 1.8], pose: ["victory", "stand"], ...at(aEnd, aH, 1), f: [1, -1], ease: "inout" },
+    { t: [1.8, 2.3], run: { lean: [18, 16] }, blend: 0.3, ...at(0, aH, -1), x: [aEnd, finOff], ease: "in" },
+  ];
+  return {
+    hero: { track: buildTrack(hero, l), hold: 0.7, end: 1.9 },
+    audience: greet(l, l.spots.audience, -1),
+    extra: greet(l, l.spots.extra, 1),
+    pricing: { track: buildTrack(fin, l), hold: 1.6, end: 2.3 },
+  };
 }
 
 /* ------------------------------------------- evaluation ------------------------------------------- */
@@ -121,18 +142,14 @@ function distance(s: Seg, l: Layout, p: number) {
   return (sum * p) / (3 * n);
 }
 
-export function buildTracks(l: Layout): Track[] {
-  const s = script(l);
-  return (["a"] as const).map((kind) => {
-    const segs = s[kind];
-    const cycle = cycleLength(kind);
-    const phase0: number[] = [];
-    segs.forEach((g, i) => {
-      const prev = segs[i - 1];
-      phase0[i] = g.run?.phase0 ?? (prev?.run ? phase0[i - 1] + distance(prev, l, 1) / cycle : 0);
-    });
-    return { kind, segs, phase0, cycle };
+function buildTrack(segs: Seg[], l: Layout, kind: Kind = "a"): Track {
+  const cycle = cycleLength(kind);
+  const phase0: number[] = [];
+  segs.forEach((g, i) => {
+    const prev = segs[i - 1];
+    phase0[i] = g.run?.phase0 ?? (prev?.run ? phase0[i - 1] + distance(prev, l, 1) / cycle : 0);
   });
+  return { kind, segs, phase0, cycle };
 }
 
 /** Blinks (time-based, so they happen while the page is still too), with an occasional double. */
@@ -158,6 +175,10 @@ function poseIn(tr: Track, i: number, tau: number, l: Layout, time: number, stil
       // breathing while standing: a slow, small squash
       const b = Math.sin(time * 1.9);
       pose = { ...pose, sq: pose.sq + 0.25 * b, shF: pose.shF + 1.5 * b, shB: pose.shB - 1.5 * b };
+      if (s.wave) {
+        const w = Math.sin(time * 10) * (s.wave === "in" ? smooth(clamp01(p / 0.3)) : 1 - smooth(p));
+        pose = { ...pose, elF: pose.elF + 32 * w, shF: pose.shF + 8 * w, lean: pose.lean + 2 * w };
+      }
     }
   }
   if (s.blend && i > 0 && p < s.blend) pose = mix(poseIn(tr, i - 1, s.t[0], l, time, still), pose, smooth(p / s.blend));
@@ -166,7 +187,8 @@ function poseIn(tr: Track, i: number, tau: number, l: Layout, time: number, stil
   return pose;
 }
 
-/** Where Snappy is at story time τ (viewport px). `still` = reduced motion / static frame: no breathing or blinks. */
+/** Where Snappy is at time τ along a track (x in viewport px, y from the ground line). `still` = reduced motion /
+ * static frame: no breathing or blinks. */
 export function place(tr: Track, tau: number, l: Layout, time: number, still = false): Placement {
   const segs = tr.segs;
   let i = segs.findIndex((s) => tau < s.t[1]);
@@ -232,10 +254,4 @@ export function sneak(t: number, l: Layout, edge: number, time: number, still = 
   }
   const height = REF_H * scale;
   return { kind: "a", x: 0.8 * l.vw, y: edge + (1 - peek) * height + 0.04 * height, scale, facing: -1, depth: 1, pose };
-}
-
-/** The frame each section shows when nothing moves (reduced motion): one telling moment per section, or none where a
- * frozen character would sit behind body text (how it works). */
-export function stillTau(stage: string, l: Layout) {
-  return ({ hero: 0.35, how: 2.5, audience: 2.98, extra: 4.35, pricing: l.mobile ? 4.55 : 5 } as Record<string, number>)[stage] ?? 0;
 }

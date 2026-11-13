@@ -44,6 +44,8 @@ export const POSES = {
   skid: pose({ lean: -16, hipF: 48, kneeF: 4, ankleF: -26, hipB: -4, kneeB: 62, ankleB: 18, shF: 100, elF: 20, shB: -60, elB: 30, sq: -0.3, look: 0.9, pupil: 1.25, smile: 0, open: 0.75 }),
   /** Framing the shot: arms up around the body, looking straight at us. */
   snap: pose({ lean: 2, hipF: 10, kneeF: 8, hipB: -10, kneeB: 8, shF: 150, elF: 60, shB: 150, elB: 60, sq: 0.2, look: 0, lid: 0.22, smile: 0.8, open: 0.2 }),
+  /** Saying hi: stapler hand raised clear of the body (it waves on the clock, see choreography), big grin. */
+  hi: pose({ lean: -5, shF: 150, elF: 25, sq: -0.25, look: 1, lookY: 0.3, pupil: 1.15, smile: 1, open: 0.75 }),
   /** Brought it: stapler held high. */
   victory: pose({ lean: -4, shF: 172, elF: 10, shB: 160, elB: 20, sq: -0.3, look: 0, pupil: 1.1, smile: 1, open: 0.8 }),
 } satisfies Record<string, Pose>;
@@ -251,6 +253,7 @@ export function buildRig(kind: Kind, parent: Element): Rig {
   node("circle", handF, { r: 9.5, fill: C.limb });
   const footF = node("path", pelvis, { d: FOOT_D, fill: C.limb });
 
+
   return {
     kind, root, shadow, pelvis, lean, squash, top, sideR, sideL, face, legF, legB, footF, footB, armF, armB, handF, handB, marks,
     pupil, lid, lidEdge, lash, mouth, mouthClip, tongue, flash, glow, lines, dust, last: new Map(), lastZ: "",
@@ -258,7 +261,10 @@ export function buildRig(kind: Kind, parent: Element): Rig {
 }
 
 /** Where and how big a character is on screen (viewport px), plus its pose. */
-export type Placement = { x: number; y: number; scale: number; facing: number; depth: number; pose: Pose; kind: Kind; /** 1 = shown, lower = ghosted behind text */ fade?: number };
+export type Placement = {
+  x: number; y: number; scale: number; facing: number; depth: number; pose: Pose; kind: Kind;
+  /** 1 = shown, lower = ghosted behind text */ fade?: number;
+};
 
 /** Screen-space box the character occupies (viewport px), for keeping it clear of headings. */
 export function extent(pl: Placement) {
@@ -367,5 +373,7 @@ export function apply(r: Rig, pl: Placement) {
   set(r, r.tongue, "opacity", String(n2(Math.min(1, p.open * 3))));
   set(r, r.flash, "opacity", String(n2(p.flash)));
   set(r, r.glow, "opacity", String(n2(p.flash * 0.9)));
+
+
   set(r, r.shadow, "transform", `scale(${n2(1 - Math.min(0.3, p.lift / 25))} 1)`);
 }
