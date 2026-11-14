@@ -62,6 +62,8 @@ export function startSnapStory(o: Options): () => void {
   const { config: cfg, section, pin, area, stage } = o;
   const el = (k: Part) => o.els[k] as HTMLElement;
   const D = cfg.durations;
+  // Held here because React nulls the element refs on unmount before this engine's cleanup runs.
+  const timerEl = o.els.timer ?? null;
 
   /* ------------------------------------------- smooth scroll ------------------------------------------- */
   const lenis = new Lenis({ lerp: cfg.lenis.lerp, smoothWheel: true, syncTouch: false, autoRaf: false });
@@ -199,6 +201,8 @@ export function startSnapStory(o: Options): () => void {
     if (idx === target && !instant) return;
     target = idx;
     if (idx >= STAGES.indexOf("viewfinder")) played = true;
+    // ScrollTrigger can fire onUpdate before the first rebuild() builds the stage timeline; rebuild() then seeks to `target`.
+    if (!stageTl) return;
     const to = labels[idx];
     driver?.kill();
     driver = null;
@@ -306,7 +310,7 @@ export function startSnapStory(o: Options): () => void {
     driver?.kill();
     willChange(false);
     ctx.revert(); // kills every tween/trigger and restores the server-rendered inline styles
-    el("timer").textContent = fmtTime(0);
+    if (timerEl) timerEl.textContent = fmtTime(0);
     gsap.ticker.remove(raf);
     gsap.ticker.lagSmoothing(500, 33);
     lenis.destroy();

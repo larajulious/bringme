@@ -12,6 +12,7 @@ import { ExtraFun } from "@/components/marketing/extra-fun";
 import { HeroScene } from "@/components/marketing/hero-scene";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { Pricing, PricingSection, PricingSkeleton } from "@/components/marketing/pricing";
+import { PromoVideo } from "@/components/marketing/promo-video";
 import { SnapStory } from "@/components/marketing/snap-story/snap-story";
 import { StoryStage } from "@/components/marketing/story/stage";
 import { StoryDriver } from "@/components/marketing/story/story-driver";
@@ -86,6 +87,7 @@ export default function Home() {
           <StoryStage name="how" tone="lavender" className="-bottom-6 -top-3" />
           <OffscreenPause />
           <HowItWorks />
+          <PromoVideo />
         </div>
         <Audience />
         <div className="relative isolate">
