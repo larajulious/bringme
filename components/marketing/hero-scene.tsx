@@ -26,7 +26,7 @@ function write(key: string, value: string) {
 }
 
 /**
- * Homepage hero visual: Snappy front and centre. Tapping draws a new "Bring me…" prompt, plays a shutter click,
+ * Homepage hero visual: Snappy front and centre. Tapping draws a new "Bring me…" prompt, plays a random funny boop sound,
  * starts a playful timer and adds a "boop" to the global counter (batched + rate limited; see use-boop-counter.ts).
  * Transform/opacity animations only; reduced motion keeps everything static (text and counter still update).
  */
@@ -54,7 +54,7 @@ export function HeroScene() {
   }, [n]);
 
   const tap = () => {
-    if (!muted) click();
+    if (!muted) click.boop();
     setN((x) => x + 1);
     boops.tap();
   };
