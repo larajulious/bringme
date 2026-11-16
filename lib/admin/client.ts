@@ -56,5 +56,7 @@ const messages: Record<string, string> = {
   invalid_max_photo_size: "Photo size must be 1–20 MB.",
   invalid_retention: "Retention must be 1–365 days.",
   invalid_support_email: "Enter a valid email address.",
+  room_not_found: "That room no longer exists.",
+  room_not_active: "That room has already ended.",
 };
 export const adminErrorMessage = (code: string) => messages[code] ?? "Something went wrong. Please try again.";

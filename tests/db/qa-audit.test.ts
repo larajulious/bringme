@@ -21,6 +21,7 @@ let db: PGlite;
 const ANON_EXEC = ["can_listen_game_topic"];
 const AUTH_EXEC = [
   "add_game_round", // migration 23: owner-checked inside
+  "admin_close_room", "admin_list_active_rooms", // migration 20261116000001: is_super_admin() checked inside
   "admin_list_subscribers", "admin_overview", "admin_pass_counts", "admin_pass_timeline", "admin_purchase_history", "admin_revenue",
   "admin_subscriber_state",
   // BingoSnap (migrations 18-20): owner-checked inside; guests use the service-role functions only
@@ -91,7 +92,7 @@ describe("TypeScript types match the migrated schema", () => {
       });
       if (!ok) missing.push(`${name}(${args.join(",")})`);
     }
-    assert.equal(count, 75, `parsed ${count} functions (update when the types gain or lose functions)`);
+    assert.equal(count, 77, `parsed ${count} functions (update when the types gain or lose functions)`);
     assert.deepEqual(missing, []);
   });
 });

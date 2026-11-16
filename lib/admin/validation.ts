@@ -189,3 +189,22 @@ export function parsePlanSyncInput(body: Record<string, unknown>): Parsed<PlanSy
   if ("duration_seconds" in body || "durationSeconds" in body) return fail("duration_fixed");
   return { ok: true, value: { name, maxPlayers: body.maxPlayers, phpMinor: body.phpMinor, usdMinor: body.usdMinor } };
 }
+
+// ---------------------------------------------------------------- games ----
+export const GAME_STATUSES = ["draft", "lobby", "live", "finished", "canceled"] as const;
+export const GAME_TYPES = ["bring_me", "bingosnap"] as const;
+export type GameListParams = {
+  q: string; status: (typeof GAME_STATUSES)[number] | null; type: (typeof GAME_TYPES)[number] | null;
+  owner: string | null; page: number;
+};
+
+/** Sanitises ?q, ?status, ?type, ?owner and ?page for /admin/games. `q` keeps only characters safe in a PostgREST filter. */
+export function parseGameListParams(sp: { q?: string; status?: string; type?: string; owner?: string; page?: string }): GameListParams {
+  const q = (sp.q ?? "").replace(/[^\p{L}\p{N} @._'-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  const status = GAME_STATUSES.find((s) => s === sp.status) ?? null;
+  const type = GAME_TYPES.find((t) => t === sp.type) ?? null;
+  const owner = sp.owner && UUID_RE.test(sp.owner) ? sp.owner.toLowerCase() : null;
+  const n = Number.parseInt(sp.page ?? "1", 10);
+  const page = Number.isFinite(n) && n >= 1 && n <= 10_000 ? n : 1;
+  return { q, status, type, owner, page };
+}

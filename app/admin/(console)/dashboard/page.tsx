@@ -96,9 +96,9 @@ export default async function AdminDashboardPage() {
         <MetricCard label="Subscribers" value={o.total_subscribers} icon={<Users />} href="/admin/subscribers"
           hint={`${o.active_subscribers} active · ${o.pending_subscribers} pending`} />
         <MetricCard label="Game Passes active" value={activePasses} accent="yellow" icon={<Ticket />} hint="Paid, trial and complimentary" />
-        <MetricCard label="Games created" value={o.total_games} accent="success" icon={<Gamepad2 />}
+        <MetricCard label="Games created" value={o.total_games} accent="success" icon={<Gamepad2 />} href="/admin/games"
           hint={completion === null ? undefined : `${o.completed_games} completed (${completion}%)`} />
-        <MetricCard label="Active rooms" value={o.active_rooms} accent="coral" icon={<DoorOpen />} hint="Lobby or live right now" />
+        <MetricCard label="Active rooms" value={o.active_rooms} accent="coral" icon={<DoorOpen />} hint="Lobby or live right now" href="/admin/rooms" />
       </section>
 
       {/* 2. Trends */}

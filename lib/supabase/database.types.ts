@@ -483,6 +483,17 @@ export type Database = {
           active_rooms: number;
         }[];
       };
+      /** Super Admin: rooms in lobby / live with their host and player count. */
+      admin_list_active_rooms: {
+        Args: Record<string, never>;
+        Returns: {
+          game_id: string; title: string; game_type: GameType; status: GameStatus; phase: GamePhase;
+          join_code: string; created_at: string; started_at: string | null;
+          owner_id: string; owner_email: string | null; owner_name: string | null; player_count: number;
+        }[];
+      };
+      /** Super Admin: force-close an active room (-> canceled), audited in admin_audit_events. */
+      admin_close_room: { Args: { p_game: string; p_reason: string }; Returns: undefined };
       /** BingoSnap, signed-in host: creates the game through the Game Pass triggers. */
       create_bingosnap_game: {
         Args: {

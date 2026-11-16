@@ -67,9 +67,10 @@ export function WinnerStage({
           </p>
         ) : null}
         {has && photoUrl ? (
-          <figure className={cn("flex min-h-0 animate-rise -rotate-2 flex-col rounded-xl bg-white p-2 pb-3 text-primary shadow-pop [animation-delay:0.7s] !shrink", large ? "max-w-xl p-3 pb-4" : "w-full max-w-xs")}>
+          <figure className={cn("flex min-h-0 max-w-full animate-rise -rotate-2 flex-col items-center rounded-xl bg-white p-2 pb-3 text-primary shadow-pop [animation-delay:0.7s] !shrink", large ? "p-3 pb-4" : "")}>
+            {/* Whole photo at its natural aspect ratio (never cropped); the polaroid hugs it. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photoUrl} alt={`Winning photo from ${winnerName}`} referrerPolicy="no-referrer" className={cn("w-full shrink rounded-md bg-black object-cover", large ? "max-h-[30dvh] min-h-0" : "max-h-56 min-h-20 tiny:min-h-16")} />
+            <img src={photoUrl} alt={`Winning photo from ${winnerName}`} referrerPolicy="no-referrer" className={cn("block h-auto w-auto max-w-full shrink rounded-md object-contain", large ? "max-h-[42dvh] min-h-[18dvh] max-w-[min(36rem,100%)]" : "max-h-[min(20rem,42dvh)] min-h-32 max-w-[min(20rem,100%)] tiny:min-h-20")} />
             <figcaption className={cn("mt-2 shrink-0 font-display font-semibold", large ? "text-2xl" : "text-sm")}>{winnerName}&apos;s photo</figcaption>
           </figure>
         ) : null}

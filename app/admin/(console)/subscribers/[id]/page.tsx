@@ -84,7 +84,7 @@ export default async function SubscriberDetailPage({
                 <tbody className="divide-y">
                   {games.map((g) => (
                     <tr key={g.id}>
-                      <td className="px-4 py-3 font-semibold">{g.title}</td>
+                      <td className="px-4 py-3 font-semibold"><Link href={`/admin/games/${g.id}`} className="text-primary underline-offset-4 hover:underline">{g.title}</Link></td>
                       <td className="px-4 py-3"><Badge variant={g.status === "live" ? "coral" : g.status === "finished" ? "success" : "secondary"}>{g.status}</Badge></td>
                       <td className="px-4 py-3 font-mono">{g.join_code}</td>
                       <td className="px-4 py-3">{g.max_players}</td>

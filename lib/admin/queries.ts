@@ -3,6 +3,7 @@ import "server-only";
 import { bucketDaily, lastDays } from "@/lib/admin/series";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import type { GameListParams } from "@/lib/admin/validation";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -103,5 +104,75 @@ export async function getActivity(days = 30) {
       (orders.data ?? []).map((r) => ({ at: r.paid_at, key: r.paid_currency ?? "", value: (r.paid_amount_minor ?? 0) - (r.refunded_amount_minor ?? 0) })),
       days, currencies,
     ),
+  };
+}
+
+/** Rooms in lobby / live with their host (admin session; the SQL function re-checks super_admin). */
+export async function listActiveRooms() {
+  const { data, error } = await (await createClient()).rpc("admin_list_active_rooms");
+  if (error) throw new Error("Could not load active rooms");
+  return data ?? [];
+}
+
+const countBy = (rows: { game_id: string }[]) =>
+  rows.reduce<Record<string, number>>((m, r) => ((m[r.game_id] = (m[r.game_id] ?? 0) + 1), m), {});
+
+/**
+ * All games, newest first, with host and player count (admin RLS on games / profiles / players).
+ * `q` matches title, join code, or the host's name / email. `q` is pre-sanitised by parseGameListParams.
+ */
+export async function listGames(args: GameListParams & { pageSize: number }) {
+  const supabase = await createClient();
+  let query = supabase
+    .from("games")
+    .select("id, title, join_code, status, phase, game_type, max_players, owner_id, created_at, started_at, finished_at", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range((args.page - 1) * args.pageSize, args.page * args.pageSize - 1);
+  if (args.status) query = query.eq("status", args.status);
+  if (args.type) query = query.eq("game_type", args.type);
+  if (args.owner) query = query.eq("owner_id", args.owner);
+  if (args.q) {
+    const like = `%${args.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    const hosts = await supabase.from("profiles").select("id").or(`email.ilike.${like},display_name.ilike.${like}`).limit(100);
+    const ids = (hosts.data ?? []).map((h) => h.id);
+    const code = args.q.replace(/\s/g, "").toUpperCase();
+    query = query.or([`title.ilike.${like}`, /^[A-Z0-9]{6}$/.test(code) ? `join_code.eq.${code}` : null, ids.length ? `owner_id.in.(${ids.join(",")})` : null].filter(Boolean).join(","));
+  }
+  const { data, error, count } = await query;
+  if (error) throw new Error("Could not load games");
+  const games = data ?? [];
+  const ownerIds = [...new Set(games.map((g) => g.owner_id))];
+  const gameIds = games.map((g) => g.id);
+  const [owners, players] = await Promise.all([
+    ownerIds.length ? supabase.from("profiles").select("id, email, display_name").in("id", ownerIds) : Promise.resolve({ data: [] }),
+    gameIds.length ? supabase.from("players").select("game_id").in("game_id", gameIds).is("kicked_at", null) : Promise.resolve({ data: [] }),
+  ]);
+  const ownerById = new Map((owners.data ?? []).map((o) => [o.id, o]));
+  const playerCount = countBy(players.data ?? []);
+  return {
+    total: count ?? 0,
+    rows: games.map((g) => ({ ...g, owner: ownerById.get(g.owner_id) ?? null, players: playerCount[g.id] ?? 0 })),
+  };
+}
+
+/** One game with its host, players and rounds (Bring Me) or board + claims (BingoSnap). Null if it doesn't exist. */
+export async function getGameDetail(id: string) {
+  const supabase = await createClient();
+  const { data: game, error } = await supabase.from("games").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error("Could not load game");
+  if (!game) return null;
+  const bingo = game.game_type === "bingosnap";
+  const [owner, players, rounds, board, claims] = await Promise.all([
+    supabase.from("profiles").select("id, email, display_name").eq("id", game.owner_id).maybeSingle(),
+    supabase.from("players").select("id, nickname, joined_at, last_seen_at, kicked_at").eq("game_id", id).order("joined_at"),
+    bingo ? Promise.resolve({ data: [] }) : supabase.from("game_rounds")
+      .select("id, round_no, prompt, status, time_limit_seconds, opened_at, closed_at, winner_player_id, winner_rank_ms, winner_confirmed_at")
+      .eq("game_id", id).order("round_no"),
+    bingo ? supabase.from("bingo_games").select("board_size, win_mode, free_space, winner_rule, duration_seconds, hunt_started_at, hunt_ends_at").eq("game_id", id).maybeSingle() : Promise.resolve({ data: null }),
+    bingo ? supabase.from("bingo_submissions").select("id, player_id, attempt_no, pattern, status, submitted_at").eq("game_id", id).order("submitted_at") : Promise.resolve({ data: [] }),
+  ]);
+  return {
+    game, owner: owner.data ?? null, players: players.data ?? [],
+    rounds: rounds.data ?? [], board: board.data ?? null, claims: claims.data ?? [],
   };
 }
