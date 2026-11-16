@@ -279,12 +279,22 @@ type BingoSubmissionRow = {
   validated_by: string | null;
   rejection_reason: string | null;
 };
+export type ImageCleanupStatus = "protected" | "pending" | "eligible";
+export type ImageCleanupRow = {
+  object_name: string; bytes: number; uploaded_at: string; age_days: number | null;
+  game_id: string | null; game_title: string | null; game_status: GameStatus | null;
+  owner_id: string | null; owner_email: string | null; owner_name: string | null;
+  pass_status: "active" | "expired" | "none" | "unknown"; pass_ends_at: string | null;
+};
+
 type SubmissionRow = {
   id: string;
   game_id: string;
   round_id: string;
   player_id: string;
   storage_path: string;
+  /** Set once the photo was removed by Image Cleanup (the row, its score and history are kept). */
+  photo_deleted_at: string | null;
   status: SubmissionStatus;
   points_awarded: number;
   submitted_at: string;
@@ -491,6 +501,37 @@ export type Database = {
           join_code: string; created_at: string; started_at: string | null;
           owner_id: string; owner_email: string | null; owner_name: string | null; player_count: number;
         }[];
+      };
+      /** Super Admin, Image Cleanup: bucket totals by cleanup status (bytes from storage metadata). */
+      admin_image_summary: {
+        Args: Record<string, never>;
+        Returns: {
+          total_count: number; total_bytes: number; pending_count: number; pending_bytes: number;
+          eligible_count: number; eligible_bytes: number; protected_count: number; protected_bytes: number;
+        }[];
+      };
+      /** Super Admin, Image Cleanup: one page of classified images (oldest first) + total_count. */
+      admin_list_images: {
+        Args: { p_status?: ImageCleanupStatus; p_from?: string; p_to?: string; p_owner?: string; p_limit?: number; p_offset?: number };
+        Returns: (ImageCleanupRow & { submission_id: string | null; cleanup_status: ImageCleanupStatus; reason: string; total_count: number })[];
+      };
+      /** Super Admin, Image Cleanup: eligible images re-evaluated now (p_names = revalidate exactly these). */
+      admin_image_cleanup_candidates: {
+        Args: { p_names?: string[] | null; p_limit?: number };
+        Returns: ImageCleanupRow[];
+      };
+      /** Super Admin, Image Cleanup: record a delete run (DB verifies which objects are gone) + audit event. */
+      admin_record_image_cleanup: {
+        Args: { p_evaluated: number; p_skipped: number; p_attempted: Json };
+        Returns: {
+          run_id: number; deleted: number; failed: number; bytes_recovered: number; references_updated: number;
+          failed_items: { name: string; reason: string }[];
+        }[];
+      };
+      /** Super Admin, Image Cleanup: past delete runs (admin_audit_events 'image_cleanup'). */
+      admin_image_cleanup_history: {
+        Args: { p_limit?: number };
+        Returns: { id: number; at: string; admin_id: string | null; admin_email: string | null; details: Json }[];
       };
       /** Super Admin: force-close an active room (-> canceled), audited in admin_audit_events. */
       admin_close_room: { Args: { p_game: string; p_reason: string }; Returns: undefined };

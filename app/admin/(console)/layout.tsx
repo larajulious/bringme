@@ -10,6 +10,7 @@ const nav: NavItem[] = [
   { label: "Subscribers", short: "Hosts", href: "/admin/subscribers", icon: "users" },
   { label: "Plans", href: "/admin/plans", icon: "plans" },
   { label: "Revenue", href: "/admin/revenue", icon: "revenue" },
+  { label: "Storage", href: "/admin/storage", icon: "storage" },
   { label: "Settings", href: "/admin/settings", icon: "settings" },
 ];
 

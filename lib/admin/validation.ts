@@ -208,3 +208,32 @@ export function parseGameListParams(sp: { q?: string; status?: string; type?: st
   const page = Number.isFinite(n) && n >= 1 && n <= 10_000 ? n : 1;
   return { q, status, type, owner, page };
 }
+
+export const IMAGE_STATUSES = ["eligible", "pending", "protected"] as const;
+export type ImageListParams = {
+  status: (typeof IMAGE_STATUSES)[number] | null;
+  /** YYYY-MM-DD (UTC), inclusive. */
+  from: string | null;
+  to: string | null;
+  owner: string;
+  page: number;
+};
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isoDay = (v: string | undefined) => (v && ISO_DAY.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) ? v : null);
+
+/** Sanitises ?status, ?from, ?to, ?owner and ?page for /admin/storage. */
+export function parseImageListParams(sp: { status?: string; from?: string; to?: string; owner?: string; page?: string }): ImageListParams {
+  const status = IMAGE_STATUSES.find((s) => s === sp.status) ?? null;
+  const owner = (sp.owner ?? "").replace(/[^\p{L}\p{N} @._'-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  const n = Number.parseInt(sp.page ?? "1", 10);
+  const page = Number.isFinite(n) && n >= 1 && n <= 10_000 ? n : 1;
+  return { status, from: isoDay(sp.from), to: isoDay(sp.to), owner, page };
+}
+
+/** Inclusive UTC day range -> [from, to) timestamps for admin_list_images. */
+export function imageDateRange(p: Pick<ImageListParams, "from" | "to">) {
+  const from = p.from ? `${p.from}T00:00:00Z` : undefined;
+  const to = p.to ? new Date(Date.parse(`${p.to}T00:00:00Z`) + 86_400_000).toISOString() : undefined;
+  return { from, to };
+}

@@ -58,5 +58,8 @@ const messages: Record<string, string> = {
   invalid_support_email: "Enter a valid email address.",
   room_not_found: "That room no longer exists.",
   room_not_active: "That room has already ended.",
+  preview_failed: "Couldn't preview the cleanup. Nothing was deleted. Try again.",
+  cleanup_failed: "The cleanup couldn't run. Nothing was deleted. Try again.",
+  confirmation_required: "Please confirm the permanent deletion first.",
 };
 export const adminErrorMessage = (code: string) => messages[code] ?? "Something went wrong. Please try again.";

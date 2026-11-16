@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 export function MetricCard({
   label,
   value,
+  display,
   hint,
   href,
   accent = "primary",
@@ -14,6 +15,8 @@ export function MetricCard({
 }: {
   label: string;
   value: number;
+  /** Shown instead of `value` when the number needs its own format (e.g. "1.2 GB"). */
+  display?: string;
   hint?: string;
   href?: string;
   accent?: "primary" | "success" | "yellow" | "coral";
@@ -27,7 +30,7 @@ export function MetricCard({
         <p className="text-xs font-semibold leading-tight text-muted-foreground sm:text-sm">{label}</p>
         {icon ? <span aria-hidden="true" className="hidden text-primary sm:inline [&_svg]:size-5">{icon}</span> : null}
       </div>
-      <p className="mt-1 font-display text-2xl font-bold text-foreground tabular-nums sm:mt-2 sm:text-4xl">{value.toLocaleString("en-US")}</p>
+      <p className="mt-1 font-display text-2xl font-bold text-foreground tabular-nums sm:mt-2 sm:text-4xl">{display ?? value.toLocaleString("en-US")}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );

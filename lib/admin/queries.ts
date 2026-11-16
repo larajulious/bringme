@@ -3,7 +3,8 @@ import "server-only";
 import { bucketDaily, lastDays } from "@/lib/admin/series";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import type { GameListParams } from "@/lib/admin/validation";
+import { CLEANUP_BUCKET, isGameplayPhotoPath } from "@/lib/admin/image-cleanup";
+import { imageDateRange, type GameListParams, type ImageListParams } from "@/lib/admin/validation";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -174,5 +175,36 @@ export async function getGameDetail(id: string) {
   return {
     game, owner: owner.data ?? null, players: players.data ?? [],
     rounds: rounds.data ?? [], board: board.data ?? null, claims: claims.data ?? [],
+  };
+}
+
+/**
+ * Image Cleanup page: totals, one filtered page of classified images (with 5-minute thumbnail URLs signed
+ * under the admin's own session: the Storage read policy allows super admins) and recent cleanup runs.
+ * Classification is done by the database (image_cleanup_classify), never here.
+ */
+export async function getImageCleanup(args: ImageListParams & { pageSize: number }) {
+  const supabase = await createClient();
+  const { from, to } = imageDateRange(args);
+  const [summary, page, history] = await Promise.all([
+    supabase.rpc("admin_image_summary"),
+    supabase.rpc("admin_list_images", {
+      p_status: args.status ?? undefined, p_from: from, p_to: to, p_owner: args.owner || undefined,
+      p_limit: args.pageSize, p_offset: (args.page - 1) * args.pageSize,
+    }),
+    supabase.rpc("admin_image_cleanup_history", { p_limit: 20 }),
+  ]);
+  if (summary.error || page.error || history.error) throw new Error("Could not load image storage");
+  const rows = page.data ?? [];
+  const paths = rows.filter((r) => isGameplayPhotoPath(r.object_name)).map((r) => r.object_name);
+  const { data: signed } = paths.length
+    ? await supabase.storage.from(CLEANUP_BUCKET).createSignedUrls(paths, 300)
+    : { data: [] };
+  const thumbs = new Map((signed ?? []).filter((s) => s.signedUrl && s.path).map((s) => [s.path as string, s.signedUrl]));
+  return {
+    summary: summary.data?.[0] ?? null,
+    rows: rows.map((r) => ({ ...r, thumbUrl: thumbs.get(r.object_name) ?? null })),
+    total: Number(rows[0]?.total_count ?? 0),
+    history: history.data ?? [],
   };
 }

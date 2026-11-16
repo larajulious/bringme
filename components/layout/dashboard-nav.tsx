@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3, CirclePlus, LayoutDashboard, ListChecks, Settings, Sparkles, Ticket, Users, type LucideIcon,
+  BarChart3, CirclePlus, HardDrive, LayoutDashboard, ListChecks, Settings, Sparkles, Ticket, Users, type LucideIcon,
 } from "lucide-react";
 
 import type { NavIcon, NavItem } from "@/components/layout/dashboard-shell";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   home: LayoutDashboard, create: CirclePlus, fun: Sparkles, pass: Ticket,
-  users: Users, plans: ListChecks, revenue: BarChart3, settings: Settings,
+  users: Users, plans: ListChecks, revenue: BarChart3, storage: HardDrive, settings: Settings,
 };
 
 /** The nav item whose href is the longest prefix of the current path ("/dashboard" only matches itself or deeper). */
