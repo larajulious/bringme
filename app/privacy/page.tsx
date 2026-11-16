@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { pageMeta } from "@/lib/site/seo";
-import { Camera, Clock, Cookie, CreditCard, Database, Eye, Lock, Mail, Server, Sparkles, UserCheck, Users, Wrench } from "lucide-react";
+import { Camera, Clock, Cookie, CreditCard, Database, Eye, Grid3x3, Lock, Mail, Server, Sparkles, UserCheck, Users, Wrench } from "lucide-react";
 
 import { LegalPage, SUPPORT_EMAIL, type LegalSection } from "@/components/marketing/legal-page";
 
@@ -11,10 +11,10 @@ export const metadata: Metadata = pageMeta({
   path: "/privacy",
 });
 
-const UPDATED = "12 November 2026";
+const UPDATED = "17 November 2026";
 
 const summary = [
-  "Players only give us a nickname and the photos they choose to snap.",
+  "Players only give us a nickname and the Bring Me photos they snap. BingoSnap photos never leave your phone.",
   "We never see or store your card details — payments go through Polar.",
   "No ads, no selling your data, and no tracking or advertising cookies.",
 ];
@@ -23,9 +23,13 @@ const summary = [
  * Keep this in sync with what the app really does (checked against the schema and API routes):
  * profiles(email, display_name), players(nickname, session token hash, joined/last seen), submissions
  * (photo + timing + technical timing meta), pass_orders/payment_events (Polar ids, amounts, event payloads),
- * Polar checkout receives account email, internal user id and IP. Cookies: Supabase auth, bm_player (12 h).
- * localStorage: homepage personal boop count + sound preference. Global boop counter: one number, nothing per
- * visitor (spam limits are in-memory only). No analytics. Photo auto-deletion is NOT implemented yet.
+ * Polar checkout receives account email, internal user id and IP. Sign-in: passwordless email code/link; signup
+ * email domain checked against a disposable list (never logged). BingoSnap: claims/cells/reviews only, photos
+ * in the player's IndexedDB (auto-deleted 24 h after the game). TV links: public token URL, presenter view
+ * (names + official winner photo). Cookies: Supabase auth, bm_player (12 h). localStorage: consent, optional
+ * prefs (boops, sound, hunt view), host "hide items"; sessionStorage: pending sign-in email. Global boop
+ * counter: one number, nothing per visitor. No analytics. Photo cleanup: Super Admin deletes Bring Me photos
+ * ≥ 14 days old (game not live, no current/queued pass); results kept (/admin/storage, manual).
  */
 const sections: LegalSection[] = [
   {
@@ -38,15 +42,16 @@ const sections: LegalSection[] = [
       <>
         <p><strong>Game Masters</strong></p>
         <ul>
-          <li>Your email address, a display name if you add one, and your password (stored securely by our login provider — we never see it).</li>
-          <li>The games you create: titles, items to bring, rounds and results.</li>
+          <li>Your email address and a display name if you add one. You sign in with a one-time code or link sent to your email, so there&apos;s no password to store.</li>
+          <li>When you sign up, we check that your email isn&apos;t from a temporary (disposable) email service. Only the domain is checked, and the check isn&apos;t logged.</li>
+          <li>The games you create: titles, items to bring or BingoSnap prompts, rounds, reviews and results.</li>
           <li>Your Game Passes and order history.</li>
         </ul>
         <p><strong>Players</strong></p>
         <ul>
           <li>The nickname you choose, and when you joined and were last active in the game.</li>
-          <li>The photos you submit and how fast you submitted them.</li>
-          <li>Technical timing details (like connection speed and upload attempts) so rounds are judged fairly.</li>
+          <li>In <strong>Bring Me</strong>: the photos you submit and how fast you submitted them, plus technical timing details (like connection speed and upload attempts) so rounds are judged fairly.</li>
+          <li>In <strong>BingoSnap</strong>: which squares you claimed, when, and the host&apos;s review. Never the photos themselves.</li>
         </ul>
         <p>Players don&apos;t create an account and we don&apos;t ask for their email or phone number.</p>
       </>
@@ -57,8 +62,19 @@ const sections: LegalSection[] = [
     body: (
       <ul>
         <li>BringMe! asks for camera permission only so you can snap items during a round. We never use your microphone.</li>
-        <li>A photo is taken only when you tap the shutter, and only that photo is uploaded.</li>
+        <li>A photo is taken only when you tap the shutter. In Bring Me, only that photo is uploaded. In BingoSnap, nothing is uploaded.</li>
         <li>You can turn off camera access at any time in your browser settings.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "bingosnap", icon: Grid3x3, tone: "bg-primary text-white", title: "BingoSnap photos",
+    body: (
+      <ul>
+        <li>BingoSnap photos are saved <strong>only in your browser on your phone</strong>. They are never uploaded to us.</li>
+        <li>To get a square checked, you show your screen to the host in person.</li>
+        <li>A copy is saved to your phone&apos;s gallery or shared only when you tap &ldquo;Save a copy&rdquo;.</li>
+        <li>You can delete your photos at any time. They&apos;re deleted from your phone automatically on your first visit more than 24 hours after the game ends, or if you were removed from the game.</li>
       </ul>
     ),
   },
@@ -106,6 +122,7 @@ const sections: LegalSection[] = [
         <li><strong>Login cookies</strong> keep Game Masters signed in.</li>
         <li>A <strong>player cookie</strong> keeps you in your game if you refresh or lose connection. It expires after 12 hours.</li>
         <li>If you allow <strong>Preferences</strong>, we remember your Snappy boop count, sound setting and list/card view in your browser only. Choose &ldquo;Cookie settings&rdquo; in the footer to change this anytime; turning it off deletes them.</li>
+        <li>Some features also store small things in your browser that they need to work: the email you&apos;re signing in with (only until you close the tab), the host&apos;s &ldquo;hide items&rdquo; setting, and BingoSnap photos (see above).</li>
         <li>We don&apos;t use advertising or third-party tracking cookies.</li>
       </ul>
     ),
@@ -115,7 +132,8 @@ const sections: LegalSection[] = [
     body: (
       <ul>
         <li>Account information is kept while your account is open.</li>
-        <li>Games, results and photos are kept with the host&apos;s game history until the host&apos;s account is closed or you ask us to delete them.</li>
+        <li>Games and results are kept with the host&apos;s game history until the host&apos;s account is closed or you ask us to delete them.</li>
+        <li><strong>Bring Me photos</strong> are deleted once they are at least 14 days old, the game is over, and the host has no active or upcoming Game Pass. Results, nicknames and times stay; the photo simply no longer appears. Until then, photos stay with the game history as above.</li>
         <li>Payment and order records are kept as long as needed for accounting, tax and legal requirements.</li>
         <li>Homepage boops are simply added to one anonymous total. We don&apos;t record who tapped or when.</li>
       </ul>

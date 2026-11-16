@@ -11,7 +11,7 @@ export const metadata: Metadata = pageMeta({
   path: "/terms",
 });
 
-const UPDATED = "11 November 2026";
+const UPDATED = "17 November 2026";
 
 const summary = [
   "Players join with a nickname — no account needed.",
@@ -28,7 +28,8 @@ const sections: LegalSection[] = [
     id: "accounts", icon: UserRound, tone: "bg-primary text-white", title: "Accounts and players",
     body: (
       <ul>
-        <li><strong>Game Masters</strong> need an account to host. Keep your login private — you&apos;re responsible for what happens on your account.</li>
+        <li><strong>Game Masters</strong> need an account to host. You sign in with a one-time code or link sent to your email, so keep access to that inbox private — you&apos;re responsible for what happens on your account.</li>
+        <li>Use a real email address you can access. Temporary (disposable) email addresses can&apos;t be used to sign up.</li>
         <li><strong>Players</strong> join by scanning the host&apos;s QR code and choosing a nickname. Pick something friendly; hosts may remove players.</li>
         <li>You must be old enough to agree to these terms where you live, or have a parent or guardian&apos;s permission.</li>
       </ul>
@@ -41,6 +42,7 @@ const sections: LegalSection[] = [
         <li>New hosts get a <strong>free 7-day trial</strong> for games of up to 3 players.</li>
         <li>Paid <strong>7-Day Game Passes</strong> (Starter, Party and Pro) are <strong>one-time purchases</strong>. Each pass lasts 7 days once it becomes active and <strong>does not renew automatically</strong>.</li>
         <li>Each pass has a player limit per game, shown before you buy. Passes already bought keep the limit and price they were sold with.</li>
+        <li>Passes cover every game type, including <strong>Bring Me</strong> and <strong>BingoSnap</strong>. Both count towards your pass&apos;s game limits.</li>
         <li>Prices are shown in PHP or USD as set for each currency. Payments are processed by our payment provider, <strong>Polar</strong>; applicable taxes may be added at checkout.</li>
         <li>A pass starts only after the payment is confirmed.</li>
       </ul>
@@ -57,14 +59,21 @@ const sections: LegalSection[] = [
         <li>Players take photos with their phone camera to submit items during a round.</li>
         <li>Only photograph things you&apos;re allowed to. <strong>Don&apos;t photograph people without their consent</strong>, private documents, or anything confidential at work.</li>
         <li>No offensive, harmful or illegal content. Hosts can disqualify photos.</li>
-        <li>Photos are stored privately. The host can see submitted photos to judge them, and the winning photo is shown to everyone in that game.</li>
+        <li>In <strong>Bring Me</strong>, photos are uploaded and stored privately. The host can see submitted photos to judge them, and the winning photo is shown to everyone in that game, including on any TV screen the host opens.</li>
+        <li>In <strong>BingoSnap</strong>, photos stay on your phone and you show them to the host in person. If you lose or clear your browser, switch phones, or the photos are auto-deleted after the game, we can&apos;t recover them.</li>
+        <li>Bring Me photos aren&apos;t kept forever. They&apos;re deleted once they are at least 14 days old, the game is over, and the host has no active or upcoming Game Pass. Results stay. See our Privacy Policy for details.</li>
         <li>You keep ownership of your photos and let us store and show them as needed to run the game.</li>
       </ul>
     ),
   },
   {
     id: "hosts", icon: Gamepad2, tone: "bg-primary text-white", title: "Hosting responsibly",
-    body: <p>Game Masters choose the items and run the game. Ask only for safe, reasonable items, follow your workplace or venue rules, and keep the game respectful for everyone in the room.</p>,
+    body: (
+      <ul>
+        <li>Game Masters choose the items or BingoSnap prompts and run the game. Ask only for safe, reasonable items, follow your workplace or venue rules, and keep the game respectful for everyone in the room.</li>
+        <li>A <strong>TV link</strong> opens your presenter screen without signing in, so anyone who has it can watch. Only share it with screens you control, and reset it if it gets shared by mistake.</li>
+      </ul>
+    ),
   },
   {
     id: "fair-play", icon: ShieldAlert, tone: "bg-brand-coral text-white", title: "Fair play and safe play",
@@ -72,7 +81,7 @@ const sections: LegalSection[] = [
       <ul>
         <li>No cheating, abusing other players, or trying to break, overload or get around the service and its limits.</li>
         <li>Play safely — no running through hazards, climbing, or going where you shouldn&apos;t to win a round. Snappy wants you back for the next one.</li>
-        <li>We may suspend or close accounts that break these rules.</li>
+        <li>We may close active game rooms, and suspend or close accounts, that break these rules. Closing a room doesn&apos;t change the host&apos;s Game Pass.</li>
       </ul>
     ),
   },
