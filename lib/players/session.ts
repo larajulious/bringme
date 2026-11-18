@@ -55,6 +55,22 @@ export async function getPlayerState(token: string | undefined): Promise<PlayerS
   return (data as PlayerSnapshot | null) ?? null;
 }
 
+/**
+ * Identity only: one indexed row (players.token_hash), for routes that need to know WHO the guest is but
+ * not the game snapshot (e.g. minting a Realtime token). null = no such session, the same rule as
+ * getPlayerState / bingo_player_state (both return null only when no player row matches).
+ */
+export async function findGuestIdentity(token: string | undefined): Promise<{ id: string; gameId: string; kicked: boolean } | null> {
+  if (!isWellFormedToken(token)) return null;
+  const { data, error } = await createAdminClient()
+    .from("players")
+    .select("id, game_id, kicked_at")
+    .eq("token_hash", hashToken(token))
+    .maybeSingle();
+  if (error) throw new HttpError(500, "state_lookup_failed");
+  return data ? { id: data.id, gameId: data.game_id, kicked: data.kicked_at !== null } : null;
+}
+
 /** SHA-256 of the session token from the cookie (401 if missing/malformed). The raw token is never kept. */
 export function requireTokenHash(request: NextRequest): string {
   const token = request.cookies.get(PLAYER_COOKIE)?.value;

@@ -4,7 +4,7 @@ import { createClient as createPlainClient, type RealtimeChannel, type SupabaseC
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ClockSync } from "@/lib/game/clock";
-import { GameSyncCore, clockOffset, combineRealtime, fallbackPlan, guestRoute, routeEverything, type FetchResult, type RtStatus } from "@/lib/game/sync";
+import { GameSyncCore, clockOffset, combineRealtime, fallbackPlan, guestRoute, isClosedGame, routeEverything, type FetchResult, type RtStatus } from "@/lib/game/sync";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
 export type Conn = "connecting" | "live" | "basic" | "reconnecting" | "offline";
@@ -12,7 +12,7 @@ export type Conn = "connecting" | "live" | "basic" | "reconnecting" | "offline";
 /** Players spread their re-reads after a join hint over 1–2.5 s (the headcount stays fresh, joins don't stampede). */
 const ROSTER_DEBOUNCE = { baseMs: 1_000, jitterMs: 1_500 };
 
-type Snap = { version: number; serverNow: string; countdownEndsAt: string | null; round?: { openedAt: string | null } | null };
+type Snap = { version: number; serverNow: string; status?: string; countdownEndsAt: string | null; round?: { openedAt: string | null } | null };
 
 /**
  * Keeps one game's authoritative state in sync on this device.
@@ -55,6 +55,12 @@ export function useGameSync<S extends Snap>(opts: {
   const [clock] = useState(() => new ClockSync());
   const fetchRef = useRef(opts.fetchSnapshot);
   fetchRef.current = opts.fetchSnapshot;
+  /**
+   * Finished/canceled (or this session ended): the database sends no more hints for this game, so
+   * the channel(s), the periodic re-read and the focus re-reads only cost a socket and database
+   * reads. They are released; the screen keeps showing its final snapshot.
+   */
+  const closed = unauthorized || isClosedGame(state);
 
   // ---- core
   useEffect(() => {
@@ -101,6 +107,7 @@ export function useGameSync<S extends Snap>(opts: {
 
   // ---- Realtime (Broadcast hints on a private channel)
   useEffect(() => {
+    if (closed) return; // nothing more will be broadcast (an open channel would only hold a socket)
     let cancelled = false;
     let client: SupabaseClient | null = null;
     let channel: RealtimeChannel | null = null;
@@ -126,6 +133,7 @@ export function useGameSync<S extends Snap>(opts: {
             refresh = setTimeout(async () => {
               try {
                 const next = await fetchToken();
+                if (cancelled) return; // unmounted (or the game closed) while the token was in flight: don't re-arm
                 client?.realtime.setAuth(next.token);
                 scheduleRefresh(next.expiresAt);
               } catch { /* the safety resync / fallback polling keep us correct */ }
@@ -166,39 +174,41 @@ export function useGameSync<S extends Snap>(opts: {
       if (hostChannel) void client?.removeChannel(hostChannel);
       if (channel) void client?.removeChannel(channel);
     };
-  }, [gameId, role, resync, tokenUrl]);
+  }, [gameId, role, resync, tokenUrl, closed]);
 
   // Make a degraded connection visible to whoever debugs a device (the UI shows "basic mode").
   useEffect(() => {
-    if (rt === "down") console.warn("[sync] Realtime unavailable for this game; re-reading every 4 s until it is back");
-  }, [rt]);
+    if (rt === "down" && !closed) console.warn("[sync] Realtime unavailable for this game; re-reading every 4 s until it is back");
+  }, [rt, closed]);
 
-  // ---- network / visibility
+  // ---- network / visibility (a closed game has nothing left to catch up on)
   useEffect(() => {
     setOnline(navigator.onLine);
-    const on = () => { setOnline(true); resync(); };
+    const catchUp = () => { if (!closed) resync(); };
+    const on = () => { setOnline(true); catchUp(); };
     const off = () => setOnline(false);
-    const vis = () => { if (document.visibilityState === "visible") resync(); };
+    const vis = () => { if (document.visibilityState === "visible") catchUp(); };
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-    window.addEventListener("focus", resync);
+    window.addEventListener("focus", catchUp);
     document.addEventListener("visibilitychange", vis);
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
-      window.removeEventListener("focus", resync);
+      window.removeEventListener("focus", catchUp);
       document.removeEventListener("visibilitychange", vis);
     };
-  }, [resync]);
+  }, [resync, closed]);
 
-  // ---- slow safety net while subscribed; slow polling only while Realtime is unavailable
+  // ---- slow safety net while subscribed; slow polling only while Realtime is unavailable; nothing once closed
   useEffect(() => {
+    if (closed) return;
     const visibleResync = () => { if (document.visibilityState === "visible") resync(); };
     const { everyMs, startAfterMs } = fallbackPlan(rt);
     let id: ReturnType<typeof setInterval> | undefined;
     const grace = setTimeout(() => { id = setInterval(visibleResync, everyMs); }, startAfterMs);
     return () => { clearTimeout(grace); clearInterval(id); };
-  }, [rt, resync]);
+  }, [rt, resync, closed]);
 
   // ---- server-timestamp boundaries: re-read exactly when the countdown ends / the round officially starts
   useEffect(() => {
@@ -221,7 +231,8 @@ export function useGameSync<S extends Snap>(opts: {
     return () => timers.forEach(clearTimeout);
   }, [deadlineAt, offsetMs, resync]);
 
-  const conn: Conn = !online ? "offline" : rt === "subscribed" ? "live" : rt === "down" ? "basic" : "connecting";
+  // A closed game's screen is final and current: it reads as "live" (as before), not "Connecting…" forever.
+  const conn: Conn = !online ? "offline" : closed || rt === "subscribed" ? "live" : rt === "down" ? "basic" : "connecting";
   return { state, conn, offsetMs, unauthorized, resync, applyState, clock, syncBurst };
 }
 

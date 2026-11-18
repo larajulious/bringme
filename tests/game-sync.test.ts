@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 
-import { FALLBACK_GRACE_MS, FALLBACK_POLL_MS, GameSyncCore, SAFETY_RESYNC_MS, clockOffset, combineRealtime, fallbackPlan, guestRoute, msUntil, routeEverything, scopeOf, secondsUntil, type FetchResult, type RoutePolicy } from "../lib/game/sync.ts";
+import { FALLBACK_GRACE_MS, FALLBACK_POLL_MS, GameSyncCore, SAFETY_RESYNC_MS, clockOffset, combineRealtime, fallbackPlan, guestRoute, isClosedGame, msUntil, routeEverything, scopeOf, secondsUntil, type FetchResult, type RoutePolicy } from "../lib/game/sync.ts";
 import { rosterKey, roundsKey, submissionsKey } from "../lib/game/refresh-keys.ts";
 import { guestChannelClaims, signHs256 } from "../lib/game/jwt.ts";
 
@@ -397,5 +397,18 @@ describe("Phase 2: host side-list refresh keys", () => {
   it("an official winner changes the submissions key (the presenter shows the winner's photo)", () => {
     const won = { ...base, round: { id: "r1", status: "closed" as const, winnerPlayerId: "p", decided: true } as never };
     assert.notEqual(submissionsKey(won), submissionsKey(base));
+  });
+});
+
+describe("Closed games release Realtime (audit G6)", () => {
+  it("finished/canceled games (and BingoSnap's completed/cancelled) are closed: the database never hints them again", () => {
+    for (const status of ["finished", "canceled", "completed", "cancelled"]) assert.equal(isClosedGame({ status }), true, status);
+  });
+
+  it("every game that can still change keeps its channel and safety re-read", () => {
+    for (const status of ["draft", "lobby", "live", "active"]) assert.equal(isClosedGame({ status }), false, status);
+    assert.equal(isClosedGame({}), false, "a snapshot without a status is never treated as closed");
+    assert.equal(isClosedGame(null), false);
+    assert.equal(isClosedGame({ status: 3 }), false);
   });
 });

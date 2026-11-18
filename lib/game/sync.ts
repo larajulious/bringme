@@ -189,6 +189,20 @@ export class GameSyncCore<S extends Versioned> {
 
 // --------------------------------------------------------- realtime health ----
 
+/**
+ * Game statuses after which the database never sends another hint: `bump_game_version` skips
+ * finished/canceled games (migration 20261113000002). BingoSnap snapshots report the same two
+ * lifecycle states as completed/cancelled. Only the host's own "archive" can still change such a
+ * game, and that screen applies its own action response.
+ */
+const CLOSED_STATUSES: ReadonlySet<string> = new Set(["finished", "canceled", "completed", "cancelled"]);
+
+/** True once a snapshot shows a game that can no longer change for this screen (no channel, no periodic re-read needed). */
+export function isClosedGame(state: { status?: unknown } | null | undefined): boolean {
+  const s = state?.status;
+  return typeof s === "string" && CLOSED_STATUSES.has(s);
+}
+
 export type RtStatus = "connecting" | "subscribed" | "down";
 
 /** The weaker of two subscriptions decides (a host needs BOTH its topics to rely on hints). */
