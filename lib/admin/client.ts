@@ -44,7 +44,7 @@ const messages: Record<string, string> = {
   job_not_retryable: "That sync can't be retried any more. Refresh the page.",
   trial_is_internal: "The Free Trial has no Polar product; edit its limits instead.",
   polar_not_configured: "Polar isn't configured for this deployment.",
-  duration_fixed: "Game Passes always last 7 days.",
+  duration_fixed: "A Game Pass's length can't be changed.",
   invalid_code: "Code: 2–40 lowercase letters, numbers, - or _.",
   invalid_name: "Name must be 1–80 characters.",
   invalid_price: "Enter a valid price.",

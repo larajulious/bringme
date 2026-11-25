@@ -30,6 +30,9 @@ The amounts live in the database (`public.plan_prices`, migration `2026111200000
 | `starter` | BringMe! Starter — 7-Day Game Pass | 10 | 7 days | **₱99.00 (`9900`)** | **$1.99 (`199`)** | one-time |
 | `party` | BringMe! Party — 7-Day Game Pass | 50 | 7 days | **₱199.00 (`19900`)** | **$3.49 (`349`)** | one-time |
 | `pro` | BringMe! Pro — 7-Day Game Pass | 100 | 7 days | **₱299.00 (`29900`)** | **$4.99 (`499`)** | one-time |
+| `monthly` | BringMe! Monthly — 30-Day Game Pass | 40 | 30 days | **₱599.00 (`59900`)** | **$9.99 (`999`)** | one-time (migration `20261126000001`) |
+
+**Monthly is not a subscription.** It's a one-time product like the others, just 30 days long; never create it as recurring (checkout, the audit and sync all refuse recurring products). In the pass queue it sits between Starter and Party (ordered by player cap).
 
 Access length and player caps are enforced by BringMe!'s database, not by Polar. A Polar product does not need any "benefit" for the pass to work.
 
@@ -62,7 +65,7 @@ Access length and player caps are enforced by BringMe!'s database, not by Polar.
 | `POLAR_SERVER` | `sandbox` | `production` |
 | `POLAR_ACCESS_TOKEN` | sandbox org token | production org token |
 | `POLAR_WEBHOOK_SECRET` | sandbox webhook secret | production webhook secret |
-| `POLAR_PRODUCT_ID_STARTER` / `_PARTY` / `_PRO` | sandbox product ids | production product ids |
+| `POLAR_PRODUCT_ID_STARTER` / `_PARTY` / `_PRO` / `_MONTHLY` | sandbox product ids | production product ids |
 
 Rules enforced by `parseBillingEnv` (tested in `tests/billing.test.ts`):
 - **Off by default.** Any missing or invalid value disables checkout, and the UI then shows disabled buttons and "Online checkout opens soon". Nothing half-works.

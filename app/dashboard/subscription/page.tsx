@@ -68,7 +68,7 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
   return (
     <div className="grid gap-12">
       <div className="grid gap-4">
-        <PageHeading title="Your Game Pass" description="Pay once, host for seven days. No subscriptions, nothing renews." className="mb-0" />
+        <PageHeading title="Your Game Pass" description="Pay once, host for 7 or 30 days. No subscriptions, nothing renews." className="mb-0" />
         {sp.checkout === "canceled" ? (
           <Card className="border-brand-coral/40" role="status">
             <CardContent className="pt-6">
@@ -87,7 +87,7 @@ export default async function GamePassPage({ searchParams }: { searchParams: Pro
       <section id="plans" aria-labelledby="plans-h" className="scroll-mt-24">
         <SectionHeader
           id="plans-h" step={2} title="Buy a Game Pass"
-          description="A bigger pass starts right away and saves the unused days of your current one for later. The same pass again adds 7 days."
+          description="A bigger pass starts right away and saves the unused days of your current one for later. The same pass again adds its days after your current one."
         />
         <PlanPicker
           plans={pickerPlans}

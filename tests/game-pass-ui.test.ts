@@ -23,17 +23,23 @@ import { parsePriceInput, parseSubscriptionAction } from "../lib/admin/validatio
 
 describe("Game Pass action buttons (policy wording)", () => {
   const none = { active: false, isTrial: false, maxPlayers: null };
-  it("no pass / expired -> Buy Game Pass", () => assert.equal(passAction(none, 10).label, "Buy Game Pass"));
+  it("no pass / expired -> Buy Game Pass", () => assert.equal(passAction(none, 10, 7).label, "Buy Game Pass"));
   it("during the free trial -> Buy Game Pass, which ends the trial", () => {
-    const a = passAction({ active: true, isTrial: true, maxPlayers: 3 }, 10);
+    const a = passAction({ active: true, isTrial: true, maxPlayers: 3 }, 10, 7);
     assert.deepEqual([a.label, /ends your free trial/.test(a.note)], ["Buy Game Pass", true]);
   });
   it("higher tier -> Upgrade Pass; same tier -> Purchase Again; lower tier -> queued after", () => {
     const party = { active: true, isTrial: false, maxPlayers: 50 };
-    assert.equal(passAction(party, 100).label, "Upgrade Pass");
-    assert.equal(passAction(party, 50).label, "Purchase Again");
-    const lower = passAction(party, 10);
+    assert.equal(passAction(party, 100, 7).label, "Upgrade Pass");
+    assert.deepEqual(passAction(party, 50, 7), { label: "Purchase Again", note: "Adds 7 days after your current pass." });
+    const lower = passAction(party, 10, 7);
     assert.deepEqual([lower.label, /after your current pass/.test(lower.note)], ["Buy Game Pass", true]);
+  });
+  it("monthly (40 players, 30 days): sits between Starter and Party; repurchase adds 30 days", () => {
+    const monthly = { active: true, isTrial: false, maxPlayers: 40 };
+    assert.deepEqual(passAction(monthly, 40, 30), { label: "Purchase Again", note: "Adds 30 days after your current pass." });
+    assert.equal(passAction(monthly, 50, 7).label, "Upgrade Pass");
+    assert.equal(passAction({ active: true, isTrial: false, maxPlayers: 50 }, 40, 30).note, "Starts after your current pass ends.");
   });
 });
 

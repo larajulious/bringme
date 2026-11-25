@@ -788,3 +788,10 @@ Presentation only: no game rules, schema, auth or information architecture chang
 - Follows every phase automatically via `useGameSync`: lobby wall (QR, room code, players arriving) → countdown → live round → judging → winner (official winner photo only) → final results with champion. No host controls on screen.
 - Controls auto-hide with the cursor after 2.5 s; `F` toggles fullscreen; screen wake lock while open.
 - `ProjectorStage` gained `presenter` mode and no longer shows the item between "Start round" and the official start ("On your marks…").
+
+## Monthly 30-Day Game Pass (2026-11-26)
+- New plan `monthly`: **one-time** 30-day pass (no auto-renewal), 40 players, 3 open games, 15 rounds, tier 4. ₱599.00 / $9.99. Migration `20261126000001_monthly_pass.sql` (additive, re-runnable).
+- Polar: one-time product "BringMe! Monthly — 30-Day Game Pass", mapped by `POLAR_PRODUCT_ID_MONTHLY` (added to `PAID_PLAN_CODES`). No env var = plan shown but not purchasable.
+- Pass queue orders by player cap, so Monthly sits between Starter and Party (Party/Pro pre-empt it; it queues behind them). Repurchase note now uses the plan's own days.
+- Copy no longer assumes 7 days (pricing cards, Game Pass page, checkout page, terms, admin sync editor).
+- Tests: config mapping, button wording, catalogue row, paid Monthly order → exactly 2,592,000 s / 40 players.

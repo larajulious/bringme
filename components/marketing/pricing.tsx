@@ -8,7 +8,7 @@ import { getBillingConfig } from "@/lib/billing/polar";
 import { getPublicCatalog } from "@/lib/billing/public-plans";
 
 const FAQ = [
-  { q: "Does it renew automatically?", a: "Never. A Game Pass is a one-time payment for 7 days of hosting. When it ends, it simply ends." },
+  { q: "Does it renew automatically?", a: "Never. A Game Pass is a one-time payment for 7 or 30 days of hosting. When it ends, it simply ends." },
   { q: "Do players need to pay or sign up?", a: "No. Only the Game Master needs a pass. Players scan the QR code and join with a nickname." },
   { q: "What if our event runs longer?", a: "Buy the same pass again to add 7 more days, or a bigger one if more people show up." },
 ];
@@ -19,7 +19,7 @@ export function PricingSection({ children }: { children: React.ReactNode }) {
     <section id="pricing" aria-labelledby="pricing-heading" className="flex min-h-svh scroll-mt-6 flex-col justify-center px-5 pb-[10rem] pt-[clamp(2.5rem,6svh,5rem)] md:pb-[clamp(2.5rem,6svh,5rem)]">
       <Reveal className="relative isolate mx-auto w-full max-w-6xl">
         <h2 id="pricing-heading" className="mb-3 text-center text-3xl font-bold text-primary sm:text-4xl lg:text-5xl">Simple pricing, per event</h2>
-        <p className="mx-auto mb-[clamp(1.25rem,4svh,2.5rem)] max-w-xl text-center text-muted-foreground lg:text-lg">Pay once, host for 7 days. No subscriptions to forget about — Snappy hates those too.</p>
+        <p className="mx-auto mb-[clamp(1.25rem,4svh,2.5rem)] max-w-xl text-center text-muted-foreground lg:text-lg">Pay once, host for 7 or 30 days. No subscriptions to forget about — Snappy hates those too.</p>
         {children}
         <dl className="mx-auto mt-[clamp(1.5rem,5svh,3rem)] grid max-w-4xl gap-4 md:grid-cols-3">
           {FAQ.map((f) => (

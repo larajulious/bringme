@@ -8,13 +8,13 @@
  *   POLAR_SERVER               "sandbox" | "production" (required; no default)
  *   POLAR_ACCESS_TOKEN         organization access token for THAT environment (secret)
  *   POLAR_WEBHOOK_SECRET       webhook signing secret for THAT environment (secret)
- *   POLAR_PRODUCT_ID_STARTER / _PARTY / _PRO   one-time product ids in THAT environment
+ *   POLAR_PRODUCT_ID_STARTER / _PARTY / _PRO / _MONTHLY   one-time product ids in THAT environment
  *   POLAR_ORGANIZATION_ID      the Polar organization (UUID) in THAT environment; orders of
  *                              any other organization are never accepted
  *   BILLING_PRODUCTION_APPROVED "true" once the sandbox checklist passed (production only)
  */
 export type PolarEnvironment = "sandbox" | "production";
-export const PAID_PLAN_CODES = ["starter", "party", "pro"] as const;
+export const PAID_PLAN_CODES = ["starter", "party", "pro", "monthly"] as const;
 export type PaidPlanCode = (typeof PAID_PLAN_CODES)[number];
 
 export const POLAR_API_BASE: Record<PolarEnvironment, string> = {

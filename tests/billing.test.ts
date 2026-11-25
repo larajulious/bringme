@@ -24,6 +24,19 @@ describe("billing config: product mapping and environment separation", () => {
     assert.ok(!("trial" in c.products), "the free trial never has a product");
   });
 
+  it("maps the Monthly 30-day pass from POLAR_PRODUCT_ID_MONTHLY; absent = simply not offered", () => {
+    const monthly = "55555555-5555-4555-8555-555555555555";
+    const c = parseBillingEnv(sandboxEnv({ POLAR_PRODUCT_ID_MONTHLY: monthly }));
+    assert.equal(c.enabled, true);
+    if (!c.enabled) return;
+    assert.equal(c.products.monthly, monthly);
+    assert.deepEqual(publicBillingState(c).plans, ["starter", "party", "pro", "monthly"]);
+    const without = parseBillingEnv(sandboxEnv());
+    assert.ok(without.enabled && !("monthly" in without.products) && without.warnings.includes("no product configured for monthly"));
+    const dup = parseBillingEnv(sandboxEnv({ POLAR_PRODUCT_ID_MONTHLY: P.pro }));
+    assert.ok(!dup.enabled && dup.reasons.includes("duplicate_product_id_pro_monthly"));
+  });
+
   it("is off by default and when any required setting is missing", () => {
     for (const [over, reason] of [
       [{ BILLING_CHECKOUT_ENABLED: undefined }, "checkout_disabled"],

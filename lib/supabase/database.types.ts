@@ -48,9 +48,9 @@ type PlanRow = {
   price_cents: number;
   /** @deprecated Game Pass: prices live in plan_prices. */
   currency: string;
-  /** Catalogue tier: trial 0, starter 1, party 2, pro 3 (null for custom plans). */
+  /** Catalogue tier: trial 0, starter 1, party 2, pro 3, monthly 4 (null for custom plans). */
   tier: number | null;
-  /** Exact pass length in seconds (604800 = 7 days). */
+  /** Exact pass length in seconds (604800 = 7 days, 2592000 = 30 days). */
   duration_seconds: number;
   is_trial: boolean;
   sort_order: number;

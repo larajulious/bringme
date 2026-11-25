@@ -72,6 +72,13 @@ describe("plan catalogue and prices", () => {
     ]);
   });
 
+  it("has the Monthly pass: 40 players, tier 4, exactly 30 days, party-level limits", async () => {
+    const r = (await db.query<Row>(
+      "select code, tier, is_trial, max_players_per_game, duration_seconds, max_active_games, max_rounds_per_game, max_games_per_period, is_active from public.subscription_plans where code = 'monthly'")).rows;
+    assert.deepEqual(r, [{ code: "monthly", tier: 4, is_trial: false, max_players_per_game: 40, duration_seconds: 2_592_000,
+      max_active_games: 3, max_rounds_per_game: 15, max_games_per_period: null, is_active: true }]);
+  });
+
   it("keeps the audited non-player limits (open games, rounds, period cap)", async () => {
     const r = (await db.query<Row>("select code, max_active_games, max_rounds_per_game, max_games_per_period from public.subscription_plans where code in ('trial','starter','party','pro') order by tier")).rows;
     assert.deepEqual(r.map((x) => [x.code, x.max_active_games, x.max_rounds_per_game, x.max_games_per_period]),
@@ -87,6 +94,7 @@ describe("plan catalogue and prices", () => {
       "starter PHP 9900 99.00", "starter USD 199 1.99",
       "party PHP 19900 199.00", "party USD 349 3.49",
       "pro PHP 29900 299.00", "pro USD 499 4.99",
+      "monthly PHP 59900 599.00", "monthly USD 999 9.99",
     ]);
     const types = (await db.query<{ data_type: string }>("select data_type from information_schema.columns where table_name='plan_prices' and column_name='amount_minor'")).rows[0];
     assert.equal(types.data_type, "integer", "no floating point money");
@@ -102,7 +110,7 @@ describe("plan catalogue and prices", () => {
 
   it("anon can read prices for the pricing page, but not Polar identifiers", async () => {
     const r = await as(db, { role: "anon" }, () => db.query("select currency, amount_minor from public.plan_prices"));
-    assert.equal(r.rows.length, 8);
+    assert.equal(r.rows.length, 10);
     assert.match((await errorOf(as(db, { role: "anon" }, () => db.query("select polar_product_id from public.plan_prices")))) ?? "", /permission denied/);
   });
 });
@@ -610,7 +618,7 @@ describe("migration: backfill, re-runs, equivalence and revert", () => {
 
     await applyGamePass(d);
     const after = await counts(d);
-    assert.deepEqual(after, { ...before, subscription_plans: before.subscription_plans + 1 }, "only the trial plan is added");
+    assert.deepEqual(after, { ...before, subscription_plans: before.subscription_plans + 2 }, "only the trial and monthly plans are added");
 
     // M-1: exact interval, plan and cap preserved for the live manual grant
     const s = (await d.query<{ s: string; e: string; source: string; max_players: number }>(

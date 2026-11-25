@@ -4,12 +4,12 @@ export type CurrentPass = { active: boolean; isTrial: boolean; maxPlayers: numbe
 export type PassAction = { label: "Buy Game Pass" | "Upgrade Pass" | "Purchase Again"; note: string };
 
 /** Button wording for a paid plan, given the host's current access (policy: GAME_PASS_DESIGN.md §3). */
-export function passAction(current: CurrentPass, planMaxPlayers: number): PassAction {
+export function passAction(current: CurrentPass, planMaxPlayers: number, planDays: number): PassAction {
   if (!current.active || current.isTrial || current.maxPlayers == null) {
     return { label: "Buy Game Pass", note: current.isTrial && current.active ? "Starts now and ends your free trial." : "Starts right after payment is confirmed." };
   }
   if (planMaxPlayers > current.maxPlayers) return { label: "Upgrade Pass", note: "Starts now. The unused days of your current pass resume afterwards." };
-  if (planMaxPlayers === current.maxPlayers) return { label: "Purchase Again", note: "Adds 7 days after your current pass." };
+  if (planMaxPlayers === current.maxPlayers) return { label: "Purchase Again", note: `Adds ${planDays} days after your current pass.` };
   return { label: "Buy Game Pass", note: "Starts after your current pass ends." };
 }
 

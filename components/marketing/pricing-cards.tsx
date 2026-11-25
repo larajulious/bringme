@@ -23,8 +23,8 @@ export const TAGLINE: Record<string, string> = {
   starter: "Team huddles and small teams",
   party: "Department parties and team building",
   pro: "Town halls and company-wide events",
+  monthly: "A whole month of team game nights",
 };
-const TERMS = ["One-time payment", "7 days of hosting", "No automatic renewal"];
 
 /**
  * Public pricing cards. Buying needs an account, so paid CTAs go to the Game Pass page with the pick preselected
@@ -101,12 +101,14 @@ export function PricingCards({ catalog, initialCurrency, checkoutEnabled }: { ca
                   {price != null ? formatMoney(price, currency) : "—"}
                 </p>
                 <p className={cn("text-sm", hot ? "text-white/80" : "text-muted-foreground")}>
-                  per 7-day pass
+                  per {p.days}-day pass
                 </p>
                 <ul className="my-6 grid gap-2.5 text-sm">
                   <Feature icon hot={hot}><strong>Up to {p.maxPlayers} players</strong> per game</Feature>
                   <Feature hot={hot}><strong>Up to {p.maxRounds} rounds</strong> per game</Feature>
-                  {TERMS.map((t) => <Feature key={t} hot={hot}>{t}</Feature>)}
+                  <Feature hot={hot}>One-time payment</Feature>
+                  <Feature hot={hot}>{p.days} days of hosting</Feature>
+                  <Feature hot={hot}>No automatic renewal</Feature>
                 </ul>
                 {checkoutEnabled && price != null ? (
                   <Button asChild variant={hot ? "default" : "outline"} className={cn("mt-auto w-full", hot && "bg-brand-yellow text-brand-night shadow-pop hover:bg-brand-yellow/90")}>

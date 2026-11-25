@@ -163,4 +163,17 @@ describe("abandoned, failed and returned checkouts", () => {
     const secs = (await db.query<{ s: number }>("select extract(epoch from (ends_at - starts_at))::float8 s from public.pass_segments where user_id=$1", [u])).rows[0].s;
     assert.equal(secs, 604_800);
   });
+
+  it("a paid Monthly order grants exactly 30 days with 40 players, at the Monthly price", async () => {
+    const u = await host();
+    const a = await start(u, "monthly", "USD");
+    assert.equal(a.amount_minor, 999);
+    await attach(a.order_id, `co_mo_${u}`, "https://sandbox.polar.sh/checkout/mo", soon(), 999, "usd");
+    await as(db, svc, () => db.query("select public.apply_payment_event('polar',$1,'order.paid','{}',$2)", [`evt_mo_${u}`, JSON.stringify({
+      kind: "order_paid", order_id: a.order_id, polar_order_id: `po_mo_${u}`, polar_product_id: PROD, currency: "USD", amount_minor: 999, environment: "sandbox" })]));
+    assert.equal((await status(u, `co_mo_${u}`)).passGranted, true);
+    const r = (await db.query<{ s: number; max_players: number }>(
+      "select extract(epoch from (sg.ends_at - sg.starts_at))::float8 s, p.max_players from public.pass_segments sg join public.game_passes p on p.id = sg.pass_id where sg.user_id=$1", [u])).rows;
+    assert.deepEqual(r, [{ s: 2_592_000, max_players: 40 }]);
+  });
 });

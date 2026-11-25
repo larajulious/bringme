@@ -15,7 +15,7 @@ const UPDATED = "17 November 2026";
 
 const summary = [
   "Players join with a nickname — no account needed.",
-  "Game Passes are one-time purchases for 7 days. Nothing renews automatically.",
+  "Game Passes are one-time purchases for 7 or 30 days. Nothing renews automatically.",
   "Play fair, play safe, and only snap what you're allowed to.",
 ];
 
@@ -40,7 +40,7 @@ const sections: LegalSection[] = [
     body: (
       <ul>
         <li>New hosts get a <strong>free 7-day trial</strong> for games of up to 3 players.</li>
-        <li>Paid <strong>7-Day Game Passes</strong> (Starter, Party and Pro) are <strong>one-time purchases</strong>. Each pass lasts 7 days once it becomes active and <strong>does not renew automatically</strong>.</li>
+        <li>Paid <strong>Game Passes</strong> are <strong>one-time purchases</strong>: Starter, Party and Pro last 7 days, and Monthly lasts 30 days, once the pass becomes active. No pass <strong>renews automatically</strong>.</li>
         <li>Each pass has a player limit per game, shown before you buy. Passes already bought keep the limit and price they were sold with.</li>
         <li>Passes cover every game type, including <strong>Bring Me</strong> and <strong>BingoSnap</strong>. Both count towards your pass&apos;s game limits.</li>
         <li>Prices are shown in PHP or USD as set for each currency. Payments are processed by our payment provider, <strong>Polar</strong>; applicable taxes may be added at checkout.</li>

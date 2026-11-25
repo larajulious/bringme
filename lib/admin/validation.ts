@@ -180,7 +180,7 @@ export function parsePriceInput(body: Record<string, unknown>): Parsed<PriceInpu
 // ------------------------------------------------------- plan edit + Polar sync ----
 export type PlanSyncInput = { name: string; maxPlayers: number; phpMinor: number; usdMinor: number };
 
-/** Name (Polar: 3–64 chars), players 2–500, PHP and USD in exact minor units (> 0). Duration is fixed (7 days). */
+/** Name (Polar: 3–64 chars), players 2–500, PHP and USD in exact minor units (> 0). Duration is fixed per plan. */
 export function parsePlanSyncInput(body: Record<string, unknown>): Parsed<PlanSyncInput> {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (name.length < 3 || name.length > 64) return fail("invalid_name");

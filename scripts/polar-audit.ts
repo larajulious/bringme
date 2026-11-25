@@ -1,7 +1,7 @@
 /**
  * READ-ONLY Polar product audit (POLAR_PRODUCT_SETUP.md §5). Never creates or edits anything.
  *   node --env-file=.env.local scripts/polar-audit.ts
- * Reads POLAR_SERVER, POLAR_ACCESS_TOKEN, POLAR_PRODUCT_ID_{STARTER,PARTY,PRO} and the approved
+ * Reads POLAR_SERVER, POLAR_ACCESS_TOKEN, POLAR_PRODUCT_ID_{STARTER,PARTY,PRO,MONTHLY} and the approved
  * amounts from the database (plan_prices via the server key). Exit 0 = every mapping matches.
  */
 import { auditProduct } from "../lib/billing/audit.ts";

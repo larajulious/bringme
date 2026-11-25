@@ -26,8 +26,7 @@ export type PickerPlan = {
 export type TrialCard = { maxPlayers: number; maxRounds: number; days: number; state: "available" | "active" | "used" | "unavailable" };
 
 /** The required one-line terms (shown verbatim). */
-export const PASS_TERMS_SENTENCE = "One-time payment. Seven days of access. No automatic renewal.";
-export const PASS_TERMS = ["One-time purchase", "7 days of access", "No automatic renewal"] as const;
+export const PASS_TERMS_SENTENCE = "One-time payment. 7 or 30 days of access. No automatic renewal.";
 
 export const ERRORS: Record<string, string> = {
   pricing_unavailable: "We couldn't confirm that exact price with our payment provider, so you were not sent to pay. Please try again later or choose the other currency.",
@@ -157,7 +156,7 @@ export function PlanPicker({
           const price = p.prices[currency];
           const alt = p.prices[other];
           const canBuy = checkoutEnabled && price != null && p.purchasable[currency] === true;
-          const action = passAction(current, p.maxPlayers);
+          const action = passAction(current, p.maxPlayers, p.days);
           const otherOk = checkoutEnabled && p.purchasable[other] === true;
           const hot = p.code === popular;
           return (

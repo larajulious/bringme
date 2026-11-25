@@ -14,7 +14,7 @@ export default async function CheckoutReturnPage({ searchParams }: { searchParam
   return (
     <>
       <BackBar href="/dashboard/subscription" label="Game Pass" />
-      <PageHeading title="Your Game Pass purchase" description="One-time purchase · 7 days of access · No automatic renewal" />
+      <PageHeading title="Your Game Pass purchase" description="One-time purchase · No automatic renewal" />
       {id ? <CheckoutStatus checkoutId={id} /> : <p className="text-muted-foreground">This link is missing its checkout reference.</p>}
     </>
   );

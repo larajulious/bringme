@@ -68,7 +68,7 @@ export function PlanSyncEditor({ plan, php, usd }: { plan: { id: string; name: s
               <Input id={`${plan.id}-pl`} type="number" min={2} max={500} value={v.players} onChange={(e) => setV({ ...v, players: e.target.value })} required />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">Duration: <strong>{Math.round(plan.duration_seconds / 86_400)} days</strong> (fixed for every Game Pass). One-time purchase, no automatic renewal.</p>
+          <p className="text-sm text-muted-foreground">Duration: <strong>{Math.round(plan.duration_seconds / 86_400)} days</strong> (fixed for this pass). One-time purchase, no automatic renewal.</p>
           {error ? <p role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive">{error}</p> : null}
           <div className="flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>

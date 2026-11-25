@@ -97,7 +97,7 @@ describe("legacy schema compatibility (pre-existing older BringMe! tables)", () 
     await applyAll(db); // re-run: idempotent
     assert.equal(await count(db, "auth.users"), before.users);
     assert.equal(await count(db, "public.profiles"), before.profiles);
-    assert.equal(await count(db, "public.subscription_plans"), before.plans + 3); // seeds add starter + pro + trial; 'party' already existed, so it is not duplicated
+    assert.equal(await count(db, "public.subscription_plans"), before.plans + 4); // seeds add starter + pro + trial + monthly; 'party' already existed, so it is not duplicated
     assert.equal(await count(db, "public.subscriptions"), before.subs);
     assert.equal(await count(db, "public.games"), before.games);
     assert.equal(await count(db, "public.game_rounds"), before.rounds);
