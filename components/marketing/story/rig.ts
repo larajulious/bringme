@@ -46,6 +46,8 @@ export const POSES = {
   snap: pose({ lean: 2, hipF: 10, kneeF: 8, hipB: -10, kneeB: 8, shF: 150, elF: 60, shB: 150, elB: 60, sq: 0.2, look: 0, lid: 0.22, smile: 0.8, open: 0.2 }),
   /** Saying hi: stapler hand raised clear of the body (it waves on the clock, see choreography), big grin. */
   hi: pose({ lean: -5, shF: 150, elF: 25, sq: -0.25, look: 1, lookY: 0.3, pupil: 1.15, smile: 1, open: 0.75 }),
+  /** Mid-hop (the hero take-off): up in the air, knees tucked, stapler high, looking straight at us. */
+  jump: pose({ lean: 0, hipF: 34, kneeF: 58, ankleF: 14, hipB: -6, kneeB: 66, ankleB: 24, shF: 165, elF: 15, shB: 150, elB: 25, lift: 14, sq: -0.6, look: 0, lookY: 0.1, pupil: 1.1, smile: 1, open: 0.7 }),
   /** Brought it: stapler held high. */
   victory: pose({ lean: -4, shF: 172, elF: 10, shB: 160, elB: 20, sq: -0.3, look: 0, pupil: 1.1, smile: 1, open: 0.8 }),
 } satisfies Record<string, Pose>;
@@ -264,6 +266,9 @@ export function buildRig(kind: Kind, parent: Element): Rig {
 export type Placement = {
   x: number; y: number; scale: number; facing: number; depth: number; pose: Pose; kind: Kind;
   /** 1 = shown, lower = ghosted behind text */ fade?: number;
+  /** Which way the arms and legs are drawn, when it differs from `facing` (facing us head-on with facing 0 would
+   * otherwise fold every limb onto the body's centre line). */
+  limbs?: number;
 };
 
 /** Screen-space box the character occupies (viewport px), for keeping it clear of headings. */
@@ -302,6 +307,7 @@ function mouthPath(smile: number, open: number, smirk: number, dx: number) {
 export function apply(r: Rig, pl: Placement) {
   const p = pl.pose;
   const f = pl.facing;
+  const fl = pl.limbs ?? f;
   const s = pl.scale;
   set(r, r.root, "transform", `translate(${n2(pl.x)} ${n2(pl.y)}) scale(${Math.round(s * 1e4) / 1e4})`);
   const depth = `${n2(pl.depth)}|${n2(pl.fade ?? 1)}`;
@@ -326,20 +332,20 @@ export function apply(r: Rig, pl: Placement) {
   // legs (pelvis space)
   const lf = legPoints(HIPX, p.hipF, p.kneeF, p.ankleF);
   const lb = legPoints(-HIPX, p.hipB, p.kneeB, p.ankleB);
-  set(r, r.legF, "d", noodle(lf.hip, lf.knee, lf.ankle, f));
-  set(r, r.legB, "d", noodle(lb.hip, lb.knee, lb.ankle, f));
-  set(r, r.footF, "transform", `translate(${n2(lf.ankle[0] * f)} ${n2(lf.ankle[1])}) scale(${n2(f)} 1) rotate(${n2(lf.foot)})`);
-  set(r, r.footB, "transform", `translate(${n2(lb.ankle[0] * f)} ${n2(lb.ankle[1])}) scale(${n2(f)} 1) rotate(${n2(lb.foot)})`);
+  set(r, r.legF, "d", noodle(lf.hip, lf.knee, lf.ankle, fl));
+  set(r, r.legB, "d", noodle(lb.hip, lb.knee, lb.ankle, fl));
+  set(r, r.footF, "transform", `translate(${n2(lf.ankle[0] * fl)} ${n2(lf.ankle[1])}) scale(${n2(fl)} 1) rotate(${n2(lf.foot)})`);
+  set(r, r.footB, "transform", `translate(${n2(lb.ankle[0] * fl)} ${n2(lb.ankle[1])}) scale(${n2(fl)} 1) rotate(${n2(lb.foot)})`);
 
   // arms (lean space): shoulders ride the squashed body sides; the stapler hand leads
   const shF: V = [SHX * sx, SHY * sy], shB: V = [-SHX * sx, SHY * sy];
   const elF = add(shF, U, p.shF), hF = add(elF, F, p.shF + p.elF);
   const elB = add(shB, U, p.shB), hB = add(elB, F, p.shB + p.elB);
-  set(r, r.armF, "d", noodle(shF, elF, hF, f));
-  set(r, r.armB, "d", noodle(shB, elB, hB, f));
+  set(r, r.armF, "d", noodle(shF, elF, hF, fl));
+  set(r, r.armB, "d", noodle(shB, elB, hB, fl));
   const tilt = -(p.shF + p.elF - 90) * 0.45; // stapler stays roughly level, tipping with the arm
-  set(r, r.handF, "transform", `translate(${n2(hF[0] * f)} ${n2(hF[1])}) scale(${n2(f)} 1) rotate(${n2(tilt)})`);
-  set(r, r.handB, "transform", `translate(${n2(hB[0] * f)} ${n2(hB[1])})`);
+  set(r, r.handF, "transform", `translate(${n2(hF[0] * fl)} ${n2(hF[1])}) scale(${n2(fl)} 1) rotate(${n2(tilt)})`);
+  set(r, r.handB, "transform", `translate(${n2(hB[0] * fl)} ${n2(hB[1])})`);
   const flick = 0.75 + 0.25 * Math.sin(p.phase * 4 * Math.PI);
   set(r, r.marks, "opacity", String(n2(p.speed * flick)));
 

@@ -29,6 +29,8 @@ function write(key: string, value: string) {
  * Homepage hero visual: Snappy front and centre. Tapping draws a new "Bring me…" prompt, plays a random funny boop sound,
  * starts a playful timer and adds a "boop" to the global counter (batched + rate limited; see use-boop-counter.ts).
  * Transform/opacity animations only; reduced motion keeps everything static (text and counter still update).
+ * Tablet/desktop: when the visitor scrolls, this Snappy hops up and runs off (the story engine hands it over to its
+ * running rig via `data-snappy` on the button; see components/marketing/story/choreography.ts).
  */
 export function HeroScene() {
   const [n, setN] = useState(0);
@@ -75,11 +77,12 @@ export function HeroScene() {
         <button
           type="button"
           onClick={tap}
+          data-hero-snappy
           className="group relative block rounded-full outline-none focus-visible:ring-4 focus-visible:ring-brand-yellow"
           aria-label="Tap Snappy for another item to bring"
         >
-          <span aria-hidden="true" className="absolute inset-2 animate-ping-soft rounded-full border-2 border-brand-yellow/60 motion-reduce:hidden" />
-          <span key={n} className={cn("block", n > 0 && "animate-wiggle motion-reduce:animate-none")}>
+          <span aria-hidden="true" className="hero-snappy-ring absolute inset-2 animate-ping-soft rounded-full border-2 border-brand-yellow/60 motion-reduce:hidden" />
+          <span key={n} className={cn("hero-snappy block", n > 0 && "animate-wiggle motion-reduce:animate-none")}>
             <Mascot mood="cheer" className="w-36 transition-transform duration-200 group-hover:scale-105 group-active:scale-95 sm:w-60" />
           </span>
         </button>

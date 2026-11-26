@@ -1,4 +1,4 @@
-import { POSES, REF_H, cycleLength, mix, runPose, withFace, type Face, type Kind, type Placement, type Pose, type PoseName } from "./rig";
+import { POSES, REF_H, cycleLength, mix, pelvisHeight, runPose, withFace, type Face, type Kind, type Placement, type Pose, type PoseName } from "./rig";
 
 /* ------------------------------------------------------------------------------------------------
  * The story, as four self-contained beats (tablet and desktop). Each belongs to one section and is drawn on that
@@ -9,8 +9,11 @@ import { POSES, REF_H, cycleLength, mix, runPose, withFace, type Face, type Kind
  * section into another, and never passes over a heading. This file is only *where* Snappy is and what he's doing;
  * *how* his body runs, blinks or squashes lives in rig.ts.
  *
- *  hero      He peeks in from the right on the hero's bottom edge, crouches, loaded, and when the visitor
- *            starts scrolling, launches and sprints out the left.
+ *  hero      The hero's own tappable Snappy (components/marketing/hero-scene.tsx) comes to life: when the visitor
+ *            starts scrolling, the static mascot crouches (CSS) and hands over to the rig at the same spot and
+ *            size, facing us, which hops up, lands, turns and sprints out the right. It's drawn on a viewport
+ *            overlay that follows the hero but stops at the top of the screen, so a fast scroll can't carry him
+ *            away unseen. Back at the top, the static mascot pops back in. Only ever one Snappy in the hero.
  *  audience  He runs in from the left, brakes beside "Who is it for?", puts his stapler hand up ("me!") and
  *            waves, and runs back out the left.
  *  extra     Same for "Extra Fun", from the right: he waves hi.
@@ -30,6 +33,8 @@ export type Layout = {
   vw: number; vh: number; mobile: boolean;
   /** Where Snappy greets "Who is it for?" and "Extra Fun" from (measured from their heading + intro). */
   spots: Record<"audience" | "extra", Spot>;
+  /** The hero mascot: its centre (fraction of width) and size (px per mascot viewBox unit); null = not on screen. */
+  hero: { x: number; k: number } | null;
 };
 
 type Ease = "linear" | "in" | "out" | "inout";
@@ -47,10 +52,15 @@ type Seg = {
   face?: Face;
   /** Waves the raised (stapler) hand on the clock, easing in over the segment ("in", then held) or out ("out"). */
   wave?: "in" | "out";
+  /** Draws the arms and legs facing this way (rig `Placement.limbs`), e.g. in profile while he faces us head-on. */
+  limbs?: number;
 };
 export type Track = { kind: Kind; segs: Seg[]; phase0: number[]; cycle: number };
 export type BeatName = "hero" | "audience" | "extra" | "pricing";
-export type Beat = { track: Track; /** where it waits while its section is in view (s) */ hold: number; /** fully exited (s) */ end: number };
+export type Beat = {
+  track: Track; /** where it waits while its section is in view (s) */ hold: number; /** fully exited (s) */ end: number;
+  /** not drawn before this (s): the hero's static mascot is still crouching */ from?: number;
+};
 
 const ease = {
   linear: { f: (p: number) => p, d: () => 1 },
@@ -64,6 +74,9 @@ const lerp = (r: Range, e: number) => r[0] + (r[1] - r[0]) * e;
 const hold = (v: number): Range => [v, v];
 
 /* ------------------------------------------- the beats ------------------------------------------- */
+
+/** The hero mascot's CSS crouch before the rig takes over (s); keep in step with `snappy-hop-out` in globals.css. */
+export const HERO_HOP = 0.16;
 
 /** Half his width (fraction of vw) at height h (fraction of vh). */
 const halfW = (l: Layout, h: number) => (66 * h * l.vh) / REF_H / l.vw;
@@ -97,13 +110,23 @@ function greet(l: Layout, spot: Spot, side: 1 | -1): Beat {
 }
 
 export function buildBeats(l: Layout): Record<BeatName, Beat> {
-  const heroH = 0.44;
-  const heroOff = offEdge(l, heroH * 0.8, -1);
+  // Hero: the static mascot crouches for HERO_HOP s (globals.css), then the rig takes over at its spot and size: the
+  // engine puts this beat's ground on the mascot's own shadow line (body bottom 4 units above it), and g0 drops the
+  // rig's ground by its crouched leg length so its body sits exactly where the mascot's was; the run's body height is
+  // within a few units of that, so he hops and runs at the mascot's level instead of rising on his legs over the
+  // prompt card. Facing 0 (straight at us) hides the 3/4 side face, so the two match; limbs are drawn in profile.
+  const k = l.hero?.k ?? 1;
+  const heroH = (k * REF_H) / l.vh;
+  const heroX = l.hero?.x ?? 0.7;
+  const g0 = ((pelvisHeight(POSES.set) - 8) * k) / l.vh;
+  const heroOff = offEdge(l, heroH, 1);
   const hero: Seg[] = [
-    // peeks in from the right, eyes the route and crouches, loaded
-    { t: [0, 0.7], pose: ["ready", "set"], ...at(0, heroH, -1), x: [1.04, 0.965], ease: "inout" },
-    // ...and launches, sprinting out the left
-    { t: [0.7, 1.9], run: { lean: [24, 16], phase0: 0.8 }, blend: 0.22, ...at(0, 0, -1), x: [0.965, heroOff], h: [heroH, heroH * 0.8], ease: "in" },
+    // springs up out of the crouch, stapler high...
+    { t: [HERO_HOP, 0.4], pose: ["set", "jump"], ...at(heroX, heroH, 0), g: hold(g0), limbs: 1, ease: "out" },
+    // ...lands loaded, turning to the right...
+    { t: [0.4, 0.66], pose: ["jump", "set"], ...at(heroX, heroH, 0), g: hold(g0), f: [0, 1], limbs: 1, ease: "in" },
+    // ...and sprints out the right
+    { t: [0.66, 1.5], run: { lean: [24, 16], phase0: 0.8 }, blend: 0.25, ...at(0, heroH, 1), g: hold(g0), x: [heroX, heroOff], ease: "in" },
   ];
   const aH = 0.31, aEnd = 0.115;
   const finOff = offEdge(l, aH, -1);
@@ -118,7 +141,7 @@ export function buildBeats(l: Layout): Record<BeatName, Beat> {
     { t: [1.8, 2.3], run: { lean: [18, 16] }, blend: 0.3, ...at(0, aH, -1), x: [aEnd, finOff], ease: "in" },
   ];
   return {
-    hero: { track: buildTrack(hero, l), hold: 0.7, end: 1.9 },
+    hero: { track: buildTrack(hero, l), hold: 0, end: 1.5, from: HERO_HOP },
     audience: greet(l, l.spots.audience, -1),
     extra: greet(l, l.spots.extra, 1),
     pricing: { track: buildTrack(fin, l), hold: 1.6, end: 2.3 },
@@ -206,6 +229,7 @@ export function place(tr: Track, tau: number, l: Layout, time: number, still = f
     y: lerp(s.g, e) * l.vh,
     scale: (lerp(s.h, e) * l.vh) / REF_H,
     facing: lerp(s.f, smooth(p)),
+    limbs: s.limbs,
     depth: lerp(s.z, e),
     pose,
   };

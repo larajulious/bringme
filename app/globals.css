@@ -333,6 +333,8 @@ html[data-fit-viewport] body {
 /* Tablet/desktop beats (engine.ts): a layer beside its section's stage, same stacking but not clipped (his head and
  * raised hand may rise a little above the section's edge). It scrolls with the page, so he can never lag it. */
 .story-beat { position: absolute; inset: 0; pointer-events: none; user-select: none; }
+/* The hero's run (engine.ts): a viewport overlay above the page, below dialogs and the cookie banner (z-50). */
+.story-beat-fixed { position: fixed; z-index: 20; }
 @keyframes story-pin { from { transform: translateY(calc(-1 * var(--vh, 100vh))); } to { transform: translateY(100cqh); } }
 @supports (animation-timeline: view()) {
   .story-stage[data-mode="live"] .story-window {
@@ -364,6 +366,19 @@ html[data-fit-viewport] body {
 [data-tone="night"]:is(.story-stage, .story-beat) { --shadow: 266 80% 6%; --shadow-a: 0.45; --fx-line: hsl(266 60% 82% / 0.7); --fx-dust: hsl(266 45% 78% / 0.55); }
 [data-tone="lavender"]:is(.story-stage, .story-beat) { --shadow: 266 50% 35%; --shadow-a: 0.2; --fx-line: hsl(266 50% 78%); --fx-dust: hsl(266 45% 88%); }
 [data-tone="paper"]:is(.story-stage, .story-beat) { --shadow: 30 30% 30%; --shadow-a: 0.2; --fx-line: hsl(36 30% 72%); --fx-dust: hsl(38 32% 85%); }
+/* Hero hand-over (story engine, tablet/desktop): when the visitor scrolls, the tappable mascot crouches and hides as its
+ * running rig takes over at the same spot (0.16s = HERO_HOP in choreography.ts); back at the top it pops back in.
+ * The engine never sets data-snappy with reduced motion, so the mascot simply stays. */
+.hero-snappy { transform-origin: 50% 96%; }
+[data-snappy="away"] .hero-snappy { animation: snappy-hop-out 0.16s ease-in forwards; }
+[data-snappy="back"] .hero-snappy { animation: snappy-hop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+[data-snappy="away"] .hero-snappy-ring { opacity: 0; }
+@keyframes snappy-hop-out {
+  0% { transform: none; }
+  99% { transform: scale(1.05, 0.95); opacity: 1; }
+  100% { transform: scale(1.05, 0.95); opacity: 0; }
+}
+@keyframes snappy-hop-in { from { transform: translateY(18%) scale(0.6); opacity: 0; } }
 /* running effects, in each section's own tone: speed lines trailing the body, dust behind the back foot */
 .rig-speed { stroke: var(--fx-line); }
 .rig-dust { fill: var(--fx-dust); }

@@ -72,14 +72,21 @@ export function startStory(): () => void {
     el.className = "story-beat";
     el.dataset.tone = stage.el.dataset.tone;
     el.setAttribute("aria-hidden", "true");
-    el.style.zIndex = getComputedStyle(stage.el).zIndex;
-    stage.el.after(el);
+    if (name === "hero") {
+      // the hero's rig stands in for the mascot and must stay seen however fast the visitor scrolls: a viewport
+      // overlay above the page (below dialogs), drawn at the mascot's scrolled position (see heroGroundOnScreen)
+      el.classList.add("story-beat-fixed");
+      document.body.appendChild(el);
+    } else {
+      el.style.zIndex = getComputedStyle(stage.el).zIndex;
+      stage.el.after(el);
+    }
     const { rig } = makeSvg(el);
     rig.root.style.display = "none";
     return [{ name, el, rig, top: 0, ground: 0, t: 0, leaving: false, fade: 1 }];
   });
 
-  let layout: Layout = { vw: 1, vh: 1, mobile: false, spots: { audience: { l: 0.3, r: 0.7, head: 200 }, extra: { l: 0.3, r: 0.7, head: 200 } } };
+  let layout: Layout = { vw: 1, vh: 1, mobile: false, spots: { audience: { l: 0.3, r: 0.7, head: 200 }, extra: { l: 0.3, r: 0.7, head: 200 } }, hero: null };
   let beats = buildBeats(layout);
   /** Section headings + their intro line (document px): the cast ghosts if it ever overlaps them. */
   let avoid: { l: number; t: number; r: number; b: number }[] = [];
@@ -103,6 +110,43 @@ export function startStory(): () => void {
   }
   const intro = (h: Element) => (h.nextElementSibling?.tagName === "P" ? h.nextElementSibling : null);
 
+  /**
+   * The hero's tappable mascot (its button: the mascot svg's layout box, unaffected by its bob or crouch): where it
+   * is and how big, and the hero beat's ground on its shadow line (mascot viewBox: 120 wide, shadow at y 100).
+   */
+  function measureHero(vw: number, y: number): Layout["hero"] {
+    const r = heroSnappy()?.getBoundingClientRect();
+    if (!r?.width) return null;
+    const k = r.width / 120;
+    heroGround = r.top + y + 100 * k;
+    return { x: (r.left + r.width / 2) / vw, k };
+  }
+  /** The hero mascot's shadow line (document px). */
+  let heroGround = 0;
+  /**
+   * Where the hero beat's ground is on screen: it scrolls with the hero, but never so far up that he'd leave the top
+   * of the screen; a fast scroll carries him up to the top edge, where he finishes his hop and sprint over the page.
+   */
+  function heroGroundOnScreen(y: number) {
+    const k = layout.hero?.k ?? 1;
+    return Math.max(heroGround - y, 124 * k + 12); // mascot top is 100 units above its shadow line; + the hop
+  }
+  const heroSnappy = () => document.querySelector<HTMLElement>("[data-hero-snappy]");
+  /** Hands the hero over: "away" = the static mascot crouches and hides (the rig takes over), "back" = it pops back in. */
+  function setHeroSnappy(state: "away" | "back" | null) {
+    const b = heroSnappy();
+    if (!b) return;
+    if (state) b.dataset.snappy = state;
+    else delete b.dataset.snappy;
+  }
+  function resetHero(popBack: boolean) {
+    const L = layers.find((x) => x.name === "hero");
+    if (!L || L.t <= 0) return;
+    L.t = 0;
+    L.leaving = false;
+    setHeroSnappy(popBack ? "back" : null);
+  }
+
   function measure() {
     const vw = document.documentElement.clientWidth;
     const vh = window.innerHeight;
@@ -117,10 +161,11 @@ export function startStory(): () => void {
     const mobile = vw < 768;
 
     const spots = {} as Layout["spots"];
+    let hero: Layout["hero"] = null;
     for (const L of layers) {
       L.top = L.el.getBoundingClientRect().top + y;
       L.el.style.display = mobile ? "none" : "";
-      if (L.name === "hero") L.ground = Math.min(L.el.offsetHeight, vh) - 2; // on the hero's bottom edge, as the page opens
+      if (L.name === "hero") hero = measureHero(vw, y);
       else if (L.name === "pricing") L.ground = footerTop - L.top - 18; // just above the footer's torn edge
       else {
         const h = document.querySelector(L.name === "audience" ? "#roles-heading" : "#extra-fun-heading");
@@ -132,7 +177,8 @@ export function startStory(): () => void {
         spots[L.name] = { l: Math.min(hb.left, pb.left) / vw, r: Math.max(hb.right, pb.right) / vw, head: L.ground + HEADROOM };
       }
     }
-    layout = { vw, vh, mobile, spots: { audience: spots.audience ?? layout.spots.audience, extra: spots.extra ?? layout.spots.extra } };
+    if (mobile) resetHero(false);
+    layout = { vw, vh, mobile, hero, spots: { audience: spots.audience ?? layout.spots.audience, extra: spots.extra ?? layout.spots.extra } };
     if (cta) cta.style.right = `${Math.round(vw - extent(sneak(SNEAK_END, layout, 0, 0, true)).l + 16)}px`; // just left of Snappy (clear of his raised arm)
     beats = buildBeats(layout);
     // phones: Snappy only appears at the end, peeking over the footer (pricing window)
@@ -148,7 +194,7 @@ export function startStory(): () => void {
   /** Whether a beat's section is in view (its cue), given the scroll position. */
   function active(name: BeatName, y: number) {
     const vh = layout.vh;
-    if (name === "hero") return y < 0.15 * vh; // the page is still at the top
+    if (name === "hero") return y < 24; // the page is still at the top: any real scroll sets him off
     if (name === "pricing") return footerTop - y < vh - 40; // the footer's edge is on screen
     const c = cue[name];
     return !!c && c.t - y < 0.85 * vh && c.b - y > 0.12 * vh; // heading coming up, intro not yet gone
@@ -156,6 +202,7 @@ export function startStory(): () => void {
 
   /** Advances a beat's clock: into its hold while active; out (faster if he hadn't arrived yet) once it isn't. */
   function step(L: Layer, beat: Beat, on: boolean, dt: number) {
+    if (L.name === "hero") return stepHero(L, beat, on, dt);
     if (on && !L.leaving) L.t = Math.min(beat.hold, L.t + dt);
     else if (L.t > 0) {
       L.leaving = true;
@@ -164,9 +211,32 @@ export function startStory(): () => void {
     }
   }
 
+  /**
+   * The hero: waits at 0 (the static mascot is the Snappy) while the page is at the top. Once the visitor scrolls,
+   * it re-measures the mascot, hands over and plays the hop and sprint through to the end (gone), and waits there.
+   * Back at the top (and once he's gone), it resets and the static mascot pops back in.
+   */
+  function stepHero(L: Layer, beat: Beat, on: boolean, dt: number) {
+    if (!on || (L.t > 0 && L.t < beat.end)) {
+      if (L.t === 0) {
+        const hero = measureHero(layout.vw, window.scrollY);
+        if (!hero) return;
+        layout = { ...layout, hero };
+        beats = { ...beats, hero: buildBeats(layout).hero };
+        setHeroSnappy("away");
+        // jumped far past the hero in one go (a link, End): nobody saw him go, so skip the run; he pops back later
+        if (heroGround - window.scrollY < 0) L.t = beats.hero.end;
+      }
+      L.leaving = true;
+      L.t = Math.min(beats.hero.end, L.t + dt);
+      L.top = window.scrollY; // overlay px → document px (for the heading check)
+      L.ground = heroGroundOnScreen(window.scrollY);
+    } else resetHero(true);
+  }
+
   /** Draws a beat at its clock (layer px), ghosted if it overlaps a heading. */
   function drawBeat(L: Layer, beat: Beat, time: number, dt: number | null, frozen = false) {
-    if (L.t <= 0) {
+    if (L.t <= (beat.from ?? 0)) {
       if (L.rig.root.style.display !== "none") L.rig.root.style.display = "none";
       return;
     }
@@ -254,12 +324,14 @@ export function startStory(): () => void {
       updateCta();
     } else {
       for (const L of layers) {
-        const beat = beats[L.name];
-        step(L, beat, active(L.name, y), dt);
-        drawBeat(L, beat, time, dt);
+        step(L, beats[L.name], active(L.name, y), dt);
+        drawBeat(L, beats[L.name], time, dt); // re-read: the hero's step may have rebuilt its beat
       }
     }
-    if (stages.some((s) => s.on)) raf = requestAnimationFrame(frame);
+    // keep going while the hero run plays, even once the hero (and every stage) has scrolled away
+    const hero = layers.find((L) => L.name === "hero");
+    const heroBusy = !layout.mobile && !!hero && hero.t > 0 && hero.t < beats.hero.end;
+    if (stages.some((s) => s.on) || heroBusy) raf = requestAnimationFrame(frame);
     else last = 0;
   }
   const wake = () => { if (!raf && !still) raf = requestAnimationFrame(frame); };
@@ -310,6 +382,7 @@ export function startStory(): () => void {
     window.removeEventListener("keydown", onKey);
     window.removeEventListener("scroll", onScroll);
     if (cta) { delete cta.dataset.show; cta.style.right = ""; }
+    setHeroSnappy(null);
     for (const L of layers) L.el.remove();
     for (const s of stages) {
       s.svg.remove();
