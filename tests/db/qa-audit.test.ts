@@ -29,6 +29,7 @@ const AUTH_EXEC = [
   "admin_record_image_cleanup", // migration 20261116000003: is_super_admin() checked inside
   "admin_revenue",
   "admin_subscriber_state",
+  "admin_utilization", // migration 20261126000002: is_super_admin() checked inside, read-only
   // BingoSnap (migrations 18-20): owner-checked inside; guests use the service-role functions only
   "bingo_host_state", "bingo_review_submission", "bingo_save_board", "bingo_start", "bingo_transition", "bingo_update_settings",
   "can_listen_game_topic", "create_bingosnap_game", "create_game_with_rounds", "default_max_players", "ensure_my_trial", "game_results",
@@ -97,7 +98,7 @@ describe("TypeScript types match the migrated schema", () => {
       });
       if (!ok) missing.push(`${name}(${args.join(",")})`);
     }
-    assert.equal(count, 82, `parsed ${count} functions (update when the types gain or lose functions)`);
+    assert.equal(count, 83, `parsed ${count} functions (update when the types gain or lose functions)`);
     assert.deepEqual(missing, []);
   });
 });

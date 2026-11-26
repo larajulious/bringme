@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { DashboardNav } from "@/components/layout/dashboard-nav";
 import { FitViewport } from "@/components/layout/fit-viewport";
 
-export type NavIcon = "home" | "create" | "fun" | "pass" | "users" | "plans" | "revenue" | "storage" | "settings";
+export type NavIcon = "home" | "create" | "fun" | "pass" | "users" | "plans" | "revenue" | "storage" | "health" | "settings";
 
 export type NavItem = {
   label: string;

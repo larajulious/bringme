@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3, CirclePlus, HardDrive, LayoutDashboard, ListChecks, Settings, Sparkles, Ticket, Users, type LucideIcon,
+  Activity, BarChart3, CirclePlus, HardDrive, LayoutDashboard, ListChecks, Settings, Sparkles, Ticket, Users, type LucideIcon,
 } from "lucide-react";
 
 import type { NavIcon, NavItem } from "@/components/layout/dashboard-shell";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   home: LayoutDashboard, create: CirclePlus, fun: Sparkles, pass: Ticket,
-  users: Users, plans: ListChecks, revenue: BarChart3, storage: HardDrive, settings: Settings,
+  users: Users, plans: ListChecks, revenue: BarChart3, storage: HardDrive, health: Activity, settings: Settings,
 };
 
 /** The nav item whose href is the longest prefix of the current path ("/dashboard" only matches itself or deeper). */
@@ -38,7 +38,7 @@ export function DashboardNav({ nav, label, variant }: { nav: NavItem[]; label: s
             const on = !!item.href && item.href === current;
             const inner = (
               <>
-                <span className={cn("grid h-8 w-14 place-items-center rounded-full transition-colors", on ? "bg-white/20" : "")}>
+                <span className={cn("grid h-8 w-full max-w-14 place-items-center rounded-full transition-colors", on ? "bg-white/20" : "")}>
                   {Icon ? <Icon aria-hidden="true" className="size-5" /> : null}
                 </span>
                 <span className="max-w-full truncate">{item.short ?? item.label}</span>

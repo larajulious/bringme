@@ -510,6 +510,11 @@ export type Database = {
           eligible_count: number; eligible_bytes: number; protected_count: number; protected_bytes: number;
         }[];
       };
+      /** Super Admin, Capacity & health: one jsonb snapshot (shape: Utilization in lib/admin/utilization.ts). */
+      admin_utilization: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
       /** Super Admin, Image Cleanup: one page of classified images (oldest first) + total_count. */
       admin_list_images: {
         Args: { p_status?: ImageCleanupStatus; p_from?: string; p_to?: string; p_owner?: string; p_limit?: number; p_offset?: number };

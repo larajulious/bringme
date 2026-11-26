@@ -4,6 +4,7 @@ import { bucketDaily, lastDays } from "@/lib/admin/series";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { CLEANUP_BUCKET, isGameplayPhotoPath } from "@/lib/admin/image-cleanup";
+import { limitsFromEnv, type Utilization } from "@/lib/admin/utilization";
 import { imageDateRange, type GameListParams, type ImageListParams } from "@/lib/admin/validation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -113,6 +114,24 @@ export async function listActiveRooms() {
   const { data, error } = await (await createClient()).rpc("admin_list_active_rooms");
   if (error) throw new Error("Could not load active rooms");
   return data ?? [];
+}
+
+/** Capacity & health snapshot (admin session; the SQL function re-checks super_admin) + the plan limits in force. */
+export async function getUtilization() {
+  const { data, error } = await (await createClient()).rpc("admin_utilization");
+  if (error || !data) throw new Error("Could not load capacity metrics");
+  const u = data as unknown as Utilization;
+  // bigint / numeric come back as numbers or strings depending on size: normalise once here.
+  const num = (v: unknown) => Number(v ?? 0);
+  return {
+    utilization: {
+      ...u,
+      db_bytes: num(u.db_bytes), storage_bytes: num(u.storage_bytes), db_connections: num(u.db_connections),
+      db_max_connections: num(u.db_max_connections), est_connections: num(u.est_connections),
+      peak_7d_connections: num(u.peak_7d_connections), players_in_rooms: num(u.players_in_rooms),
+    } satisfies Utilization,
+    limits: limitsFromEnv(process.env),
+  };
 }
 
 const countBy = (rows: { game_id: string }[]) =>
