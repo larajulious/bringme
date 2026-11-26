@@ -12,6 +12,7 @@ import { ExtraFun } from "@/components/marketing/extra-fun";
 import { HeroScene } from "@/components/marketing/hero-scene";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { Pricing, PricingSection, PricingSkeleton } from "@/components/marketing/pricing";
+import { JsonLd } from "@/components/marketing/json-ld";
 import { PromoVideo } from "@/components/marketing/promo-video";
 import { SnapStory } from "@/components/marketing/snap-story/snap-story";
 import { StoryStage } from "@/components/marketing/story/stage";
@@ -40,8 +41,7 @@ function StructuredData() {
       },
     ],
   };
-  // "<" is escaped so the JSON can never close the script tag.
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }} />;
+  return <JsonLd data={data} />;
 }
 
 
@@ -58,7 +58,7 @@ export default function Home() {
         <section className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-6 px-5 pb-16 pt-2 text-center md:grid-cols-[1.1fr_0.9fr] md:gap-4 md:pb-28 md:pt-12 md:text-left">
           <div className="flex flex-col items-center gap-4 sm:gap-5 md:items-start">
             <Badge variant="yellow" className="animate-rise">Real-time party game</Badge>
-            <h1 className="sr-only">BringMe!</h1>
+            <h1 className="sr-only">BringMe! The real-time photo party game for office parties, team building and Christmas</h1>
             <div className="animate-rise [animation-delay:80ms]"><Logo size="xl" tone="light" bang /></div>
             <p className="max-w-md animate-rise text-lg text-white/90 [animation-delay:160ms] sm:text-2xl">
               Find it, snap it, win it. The office party game where the whole team races to bring the goods<span className="hidden sm:inline"> — perfect for team building, town halls and Christmas parties</span>.

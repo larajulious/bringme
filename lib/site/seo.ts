@@ -1,8 +1,8 @@
 /** Shared copy for search results and social cards (Facebook / X / WhatsApp / LinkedIn previews). */
 export const SITE_NAME = "BringMe!";
-export const SITE_TITLE = "BringMe! — The real-time party game";
+export const SITE_TITLE = "BringMe! — Office Party & Team Building Photo Game";
 export const SITE_DESCRIPTION =
-  "The office party game where everyone races to find and snap the item. Players join with a QR code: no app, no sign-up. Perfect for team building and parties.";
+  "The real-time photo scavenger hunt for office parties and team building: everyone races to find and snap the item. Players join by QR code, no app or sign-up.";
 
 /** The share image (app/opengraph-image.png, 1200×630). Pages that set their own `openGraph` must
  *  list it again: Next replaces the parent's openGraph / twitter objects instead of merging them. */

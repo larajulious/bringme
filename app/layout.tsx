@@ -22,11 +22,17 @@ export const metadata: Metadata = {
   description: SITE_DESCRIPTION,
   keywords: [
     "party game", "office party game", "team building game", "scavenger hunt game", "photo scavenger hunt",
-    "QR code game", "Christmas party game", "town hall icebreaker", "photo bingo",
+    "QR code game", "Christmas party game", "town hall icebreaker", "photo bingo", "bring me game",
+    "icebreaker games for large groups", "Christmas office party game",
   ],
   category: "games",
   creator: SITE_NAME,
   publisher: SITE_NAME,
+  // Search Console / Bing Webmaster Tools ownership tags, set per deployment (public values, not secrets).
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+    other: process.env.BING_SITE_VERIFICATION ? { "msvalidate.01": process.env.BING_SITE_VERIFICATION } : undefined,
+  },
   formatDetection: { telephone: false, email: false, address: false },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
   // Facebook / LinkedIn / WhatsApp (Open Graph). The image is app/opengraph-image.png (1200×630).

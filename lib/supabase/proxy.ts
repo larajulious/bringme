@@ -52,6 +52,9 @@ export async function updateSession(request: NextRequest) {
     path === "/" ||
     path === "/terms" ||
     path === "/privacy" ||
+    // Public party game guides (SEO landing pages)
+    path === "/party-games" ||
+    path.startsWith("/party-games/") ||
     // Crawler and browser files (search engines, social previews, "Add to Home Screen")
     path === "/robots.txt" ||
     path === "/sitemap.xml" ||

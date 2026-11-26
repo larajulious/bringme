@@ -10,18 +10,27 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GUIDES, guidePath } from "@/lib/site/guides";
 
 export type LegalSection = { id: string; icon: LucideIcon; tone: string; title: string; body: React.ReactNode };
 
 /** Public support address (not a secret). Override with NEXT_PUBLIC_SUPPORT_EMAIL. */
 export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "hello@bringme.fun";
 
-/** Shared footer for public pages, with links to the legal pages. */
+/** Shared footer for public pages, with links to the party game guides and the legal pages. */
 export function SiteFooter() {
   return (
     <footer className="paper-edge-top relative isolate overflow-hidden bg-brand-night px-5 pb-10 pt-14 text-center text-sm text-white/80">
       <Logo size="sm" tone="light" className="mb-2" />
       <p>The real-time party game.</p>
+      <nav aria-label="Party game ideas" className="mx-auto mt-4 max-w-2xl">
+        <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+          <li><Link href="/party-games" className="underline-offset-4 hover:text-brand-yellow hover:underline">Party game ideas</Link></li>
+          {GUIDES.map((g) => (
+            <li key={g.slug}><Link href={guidePath(g.slug)} className="underline-offset-4 hover:text-brand-yellow hover:underline">{g.short}</Link></li>
+          ))}
+        </ul>
+      </nav>
       <nav aria-label="Legal" className="mt-3 flex justify-center gap-4">
         <Link href="/terms" className="font-semibold underline underline-offset-4 hover:text-brand-yellow">Terms &amp; Conditions</Link>
         <Link href="/privacy" className="font-semibold underline underline-offset-4 hover:text-brand-yellow">Privacy Policy</Link>
