@@ -48,6 +48,8 @@ export type ListingDeps = {
   ranking(roundId: string): Promise<RankingRow[]>;
   /** The round's winner once it is official, else null. */
   officialWinner(roundId: string): Promise<string | null>;
+  /** Whether the host opted in to display this round's players' photos on the presenter/TV screen. */
+  showPhotoWall?(roundId: string): Promise<boolean>;
   /** path -> signed URL; a missing entry means that path couldn't be signed. */
   sign(paths: string[], ttlSeconds: number): Promise<Map<string, string>>;
 };
@@ -83,8 +85,16 @@ export async function listSubmissionPhotos(
   const rows = await deps.ranking(game.currentRoundId);
   let showable: (r: RankingRow) => boolean = () => true;
   if (opts.view === "presenter") {
-    const winner = game.phase === "winner_announced" ? await deps.officialWinner(game.currentRoundId) : null;
-    showable = (r) => winner !== null && r.player_id === winner;
+    const wallAllowed =
+      (game.phase === "reviewing" || game.phase === "winner_announced") &&
+      Boolean(await deps.showPhotoWall?.(game.currentRoundId));
+    if (wallAllowed) {
+      // Disqualified photos are never exposed on the public presenter/TV photo wall.
+      showable = (r) => r.status !== "rejected";
+    } else {
+      const winner = game.phase === "winner_announced" ? await deps.officialWinner(game.currentRoundId) : null;
+      showable = (r) => winner !== null && r.player_id === winner;
+    }
   }
   const visible = (r: RankingRow) => showable(r) && isGamePhotoPath(r.storage_path, opts.gameId);
 

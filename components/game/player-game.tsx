@@ -176,7 +176,7 @@ function PlayerGameInner({ code, initial }: { code: string; initial: PlayerSnaps
     const more = s.roundsRemaining > 0;
     const mine = s.me.submission;
     body = (
-      <div className="flex min-h-0 w-full flex-col gap-4 short:gap-2">
+      <div className="flex min-h-0 w-full flex-col gap-2.5 short:gap-2">
         <WinnerStage
           roundLabel={header}
           prompt={r.prompt}
@@ -185,23 +185,26 @@ function PlayerGameInner({ code, initial }: { code: string; initial: PlayerSnaps
           photoUrl={winnerPhoto?.round === r.id ? winnerPhoto.url : null}
           headline={s.me.isWinner ? "You won!" : undefined}
           heading="h1"
+          size="compact"
           celebrate
           sublineShortHidden
           subline={s.me.isWinner ? "Everyone is looking at your photo right now." : r.winnerName ? `${r.winnerName} wins this round!` : null}
         />
-        <div className="shrink-0 rounded-4xl bg-white/12 p-4 text-center short:p-2" role="status">
+        <div className="shrink-0 rounded-2xl bg-white/12 px-4 py-2.5 ring-1 ring-white/15 short:py-2" role="status">
           {mine ? (
-            <>
-              <p className="text-sm font-bold uppercase tracking-widest text-white/75">Your time</p>
-              <p className="font-mono text-4xl font-bold tabular-nums text-brand-yellow short:text-3xl tiny:text-2xl">{formatElapsed(mine.rankMs)}</p>
-              {mine.timing === "flagged" ? <p className="mt-1 text-sm text-white/75">Adjusted to the server&apos;s own measurement.</p> : null}
-              {mine.review === "rejected" ? <p className="mt-2 font-semibold text-brand-coral">Your photo was disqualified this round.</p> : null}
-            </>
+            <div className="grid gap-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/75">Your time</p>
+                <p className="font-mono text-2xl font-bold tabular-nums text-brand-yellow short:text-xl">{formatElapsed(mine.rankMs)}</p>
+              </div>
+              {mine.timing === "flagged" ? <p className="text-left text-xs text-white/75">Adjusted to the server&apos;s own measurement.</p> : null}
+              {mine.review === "rejected" ? <p className="text-left text-xs font-semibold text-brand-coral">Your photo was disqualified this round.</p> : null}
+            </div>
           ) : (
-            <p className="text-white/85">You didn&apos;t send a photo this round. Next one!</p>
+            <p className="text-sm text-white/85">You didn&apos;t send a photo this round. Next one!</p>
           )}
         </div>
-        <p className="shrink-0 text-white/80 tiny:text-sm">{more ? "Next round coming up…" : "That was the last round! Final results next."}</p>
+        <p className="shrink-0 text-xs font-medium text-white/75">{more ? "Next round coming up…" : "That was the last round! Final results next."}</p>
       </div>
     );
   } else {
@@ -244,9 +247,15 @@ function PlayerGameInner({ code, initial }: { code: string; initial: PlayerSnaps
   const fills = !over ? s.phase === "winner_announced" && !!s.round : s.status === "finished" && !s.me.kicked && !unauthorized;
   return (
     <div className={cn("relative my-auto flex w-full flex-col items-center text-center text-white", fills && "max-h-full min-h-0")}>
-      <div className={cn("relative z-10 flex w-full flex-col items-center", fills ? "min-h-0" : "shrink-0")}>{body}</div>
+      <div className={cn("relative z-10 flex w-full flex-col items-center", fills ? "min-h-0 flex-1" : "shrink-0")}>{body}</div>
       {!over && !(s.phase === "active" && s.round) ? (
-        <p className="relative z-10 mt-10 inline-flex shrink-0 items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold short:mt-4 short:py-1.5 tiny:mt-2" role="status">
+        <p
+          className={cn(
+            "relative z-10 inline-flex shrink-0 items-center gap-2 rounded-full bg-white/15 font-semibold",
+            fills ? "mt-3 px-3.5 py-1.5 text-xs short:mt-2" : "mt-10 px-4 py-2 text-sm short:mt-4 short:py-1.5 tiny:mt-2",
+          )}
+          role="status"
+        >
           <span aria-hidden="true" className={cn("size-2.5 rounded-full", status.dot, conn === "live" && "animate-pulse motion-reduce:animate-none")} />
           {status.text}
         </p>

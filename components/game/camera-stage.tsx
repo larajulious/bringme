@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Hourglass, RefreshCw, TriangleAlert } from "lucide-react";
+import { Camera, Hourglass, RefreshCw, SwitchCamera, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CameraGate } from "@/components/game/camera-gate";
@@ -11,6 +11,7 @@ import { useCamera } from "@/components/game/camera-context";
 import { ITEM_WRAP, itemSize } from "@/components/game/item-text";
 import { useNow } from "@/components/game/use-game-sync";
 import { Button } from "@/components/ui/button";
+import { isSelfieFacing } from "@/lib/game/camera";
 import type { ClockSync } from "@/lib/game/clock";
 import type { PlayerSnapshot } from "@/lib/game/types";
 import { encodeJpeg, grabFrame } from "@/lib/game/photo";
@@ -32,7 +33,15 @@ async function postJson(url: string, body: unknown): Promise<Record<string, unkn
   return data;
 }
 
-function CameraPreview({ onVideo, onFrames }: { onVideo: (v: HTMLVideoElement | null) => void; onFrames: (ready: boolean) => void }) {
+function CameraPreview({
+  onVideo,
+  onFrames,
+  mirror,
+}: {
+  onVideo: (v: HTMLVideoElement | null) => void;
+  onFrames: (ready: boolean) => void;
+  mirror: boolean;
+}) {
   const { stream } = useCamera();
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -43,12 +52,27 @@ function CameraPreview({ onVideo, onFrames }: { onVideo: (v: HTMLVideoElement | 
     onFrames(false);
     v.addEventListener("loadeddata", ready);
     v.addEventListener("playing", ready);
+    v.addEventListener("resize", ready);
     v.srcObject = stream;
     void v.play().catch(() => undefined);
     ready();
-    return () => { v.removeEventListener("loadeddata", ready); v.removeEventListener("playing", ready); onVideo(null); };
+    return () => {
+      v.removeEventListener("loadeddata", ready);
+      v.removeEventListener("playing", ready);
+      v.removeEventListener("resize", ready);
+      onVideo(null);
+    };
   }, [stream, onVideo, onFrames]);
-  return <video ref={ref} playsInline muted autoPlay aria-label="Live camera preview" className="h-full w-full bg-black object-cover" />;
+  return (
+    <video
+      ref={ref}
+      playsInline
+      muted
+      autoPlay
+      aria-label="Live camera preview"
+      className={cn("h-full w-full bg-black object-cover", mirror && "-scale-x-100")}
+    />
+  );
 }
 
 /** Corner brackets + rule-of-thirds guides: tells the player "this is what gets photographed". */
@@ -155,7 +179,9 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
   const limitMs = r.timeLimitSeconds * 1000;
   const closedAtMs = r.closedAt ? Date.parse(r.closedAt) - openedMs : limitMs;
   const stoppedMs = timeUp && !done && !busy && flowState.kind !== "failed" ? Math.max(0, Math.min(limitMs, closedAtMs)) : null;
-  const canCapture = cam.status === "ready" && hasFrames && !done && !busy && !timeUp && flowState.kind === "idle";
+  const isSelfie = isSelfieFacing(cam.facing, cam.preferredFacing);
+  const canCapture = cam.status === "ready" && !cam.switching && hasFrames && !done && !busy && !timeUp && flowState.kind === "idle";
+  const canSwitch = cam.status === "ready" && !cam.switching && !done && !busy && !timeUp && !roundClosed && flowState.kind === "idle";
 
   // Live SS.mmm timer drawn straight into the DOM (60 fps without re-rendering React); frozen after the tap.
   useEffect(() => {
@@ -182,7 +208,7 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
     lock.current = true;
 
     // 2) grab the frame synchronously: THIS is the photo
-    const frame = grabFrame(video);
+    const frame = grabFrame(video, undefined, isSelfie);
     video.pause(); // freezes what the player sees = what was captured
     setFlash((n) => n + 1);
 
@@ -247,10 +273,16 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
         {roundClosed ? (
           <div aria-hidden="true" className="h-full w-full bg-brand-night" />
         ) : cam.status === "ready" ? (
-          <CameraPreview onVideo={setVideoEl} onFrames={setHasFrames} />
+          <CameraPreview onVideo={setVideoEl} onFrames={setHasFrames} mirror={isSelfie} />
         ) : (
           <div className="grid h-full place-items-center overflow-y-auto p-4"><CameraGate compact /></div>
         )}
+
+        {cam.status === "ready" && cam.switching && !roundClosed && !done && !failed && !busy ? (
+          <div className="absolute inset-0 grid place-items-center bg-black/60" role="status">
+            <div className="grid justify-items-center gap-2"><WaitingDots /><p>Switching camera…</p></div>
+          </div>
+        ) : null}
 
         {cam.status === "ready" && !roundClosed && !done && !failed && !busy ? <Viewfinder /> : null}
         {flash > 0 ? <span key={flash} aria-hidden="true" className="pointer-events-none absolute inset-0 animate-shutter-flash bg-white motion-reduce:hidden" /> : null}
@@ -319,22 +351,41 @@ export function CameraStage({ snapshot, clock, offsetMs, connection }: { snapsho
         {done ? (
           <p className="text-center text-white/80">One photo per round. You&apos;re all set.</p>
         ) : (
-          <>
-            <button
-              type="button"
-              aria-label="Take photo"
-              disabled={!canCapture}
-              onPointerDown={(e) => { if (e.isPrimary && (e.pointerType !== "mouse" || e.button === 0)) capture(); }}
-              onClick={(e) => { if (e.detail === 0) capture(); /* keyboard activation; pointer taps were handled on press */ }}
-              className="relative grid size-24 touch-manipulation select-none place-items-center rounded-full border-4 border-white p-1.5 transition-transform motion-safe:active:scale-95 disabled:opacity-40"
-            >
-              {canCapture ? <span aria-hidden="true" className="absolute -inset-2 animate-ping-soft rounded-full border-2 border-brand-coral/70 motion-reduce:hidden" /> : null}
-              <span className="grid size-full place-items-center rounded-full bg-brand-coral text-white shadow-pop-coral">
-                <Camera aria-hidden="true" className="size-10" />
-              </span>
-            </button>
-            <p className="text-sm font-semibold text-white/70" aria-hidden="true">{canCapture ? "Tap to snap" : busy ? "Sending…" : " "}</p>
-          </>
+          <div className="grid w-full max-w-xs grid-cols-[1fr_auto_1fr] items-center gap-4 landscape:tiny:w-auto landscape:tiny:grid-cols-1 landscape:tiny:justify-items-center landscape:tiny:gap-3">
+            <span aria-hidden="true" className="landscape:tiny:hidden" />
+            <div className="grid justify-items-center gap-1">
+              <button
+                type="button"
+                aria-label="Take photo"
+                disabled={!canCapture}
+                onPointerDown={(e) => { if (e.isPrimary && (e.pointerType !== "mouse" || e.button === 0)) capture(); }}
+                onClick={(e) => { if (e.detail === 0) capture(); /* keyboard activation; pointer taps were handled on press */ }}
+                className="relative grid size-24 touch-manipulation select-none place-items-center rounded-full border-4 border-white p-1.5 transition-transform motion-safe:active:scale-95 disabled:opacity-40"
+              >
+                {canCapture ? <span aria-hidden="true" className="absolute -inset-2 animate-ping-soft rounded-full border-2 border-brand-coral/70 motion-reduce:hidden" /> : null}
+                <span className="grid size-full place-items-center rounded-full bg-brand-coral text-white shadow-pop-coral">
+                  <Camera aria-hidden="true" className="size-10" />
+                </span>
+              </button>
+              <p className="text-sm font-semibold text-white/70" aria-hidden="true">{canCapture ? "Tap to snap" : busy ? "Sending…" : " "}</p>
+            </div>
+            <div className="flex justify-start landscape:tiny:justify-center">
+              <button
+                type="button"
+                aria-label={isSelfie ? "Switch to back camera" : "Switch to selfie camera"}
+                aria-pressed={isSelfie}
+                title={isSelfie ? "Switch to back camera" : "Switch to selfie camera"}
+                disabled={!canSwitch}
+                onClick={() => void cam.switchCamera()}
+                className="grid touch-manipulation select-none justify-items-center gap-1 rounded-2xl p-1 text-white/85 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow disabled:opacity-40"
+              >
+                <span className="grid size-14 place-items-center rounded-full border-2 border-white/30 bg-white/12 transition-all hover:bg-white/20 motion-safe:active:scale-95">
+                  <SwitchCamera aria-hidden="true" className={cn("size-6", cam.switching && "animate-spin motion-reduce:animate-none")} />
+                </span>
+                <span className="text-xs font-semibold text-white/75" aria-hidden="true">{isSelfie ? "Back" : "Selfie"}</span>
+              </button>
+            </div>
+          </div>
         )}
       </footer>
     </div>

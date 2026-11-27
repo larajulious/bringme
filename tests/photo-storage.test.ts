@@ -16,12 +16,13 @@ function rankRow(player = uuid(), over: Partial<RankingRow> = {}): RankingRow {
     server_elapsed_ms: 1040, timing_status: "consistent", timing_flags: [], near_tie: false, is_leader: false, storage_path: path(player), ...over };
 }
 /** A fake owner-scoped database + counting signer. */
-function deps(rows: RankingRow[], o: { owner?: boolean; phase?: string; winner?: string | null; failSign?: boolean } = {}) {
-  const calls = { game: 0, ranking: 0, winner: 0, sign: 0, signedPaths: [] as string[] };
+function deps(rows: RankingRow[], o: { owner?: boolean; phase?: string; winner?: string | null; failSign?: boolean; showWall?: boolean } = {}) {
+  const calls = { game: 0, ranking: 0, winner: 0, wall: 0, sign: 0, signedPaths: [] as string[] };
   const d: ListingDeps = {
     game: async () => { calls.game++; return o.owner === false ? null : { currentRoundId: ROUND, phase: o.phase ?? "active" }; },
     ranking: async () => { calls.ranking++; return rows; },
     officialWinner: async () => { calls.winner++; return o.winner ?? null; },
+    ...(o.showWall !== undefined ? { showPhotoWall: async () => { calls.wall++; return o.showWall!; } } : {}),
     sign: async (paths) => { calls.sign++; calls.signedPaths.push(...paths); return o.failSign ? new Map() : new Map(paths.map((p) => [p, `https://s/${p}?t=${uuid()}`])); },
   };
   return { d, calls };
@@ -66,6 +67,28 @@ describe("listSubmissionPhotos: who gets which URL", () => {
     const l = (await listSubmissionPhotos(d, { gameId: GAME, view: "presenter", have: new Set() }))!;
     assert.deepEqual(calls.signedPaths, [path(winner)]);
     assert.deepEqual(l.submissions.map((r) => Boolean(r.photoUrl)), [false, true, false]);
+  });
+
+  it("presenter photo wall: when opted in during review or winner announcement, signs non-rejected photos only; never during active hunt", async () => {
+    const pPending = uuid(), pApproved = uuid(), pRejected = uuid();
+    const rows = [
+      rankRow(pPending, { status: "pending" }),
+      rankRow(pApproved, { status: "approved" }),
+      rankRow(pRejected, { status: "rejected" }),
+    ];
+
+    const active = deps(rows, { phase: "active", showWall: true });
+    const lActive = (await listSubmissionPhotos(active.d, { gameId: GAME, view: "presenter", have: new Set() }))!;
+    assert.equal(active.calls.sign, 0, "never signs photos while the round is still active");
+    assert.ok(lActive.submissions.every((r) => r.photoKey === null && r.photoUrl === null));
+
+    for (const phase of ["reviewing", "winner_announced"]) {
+      const { d, calls } = deps(rows, { phase, winner: pApproved, showWall: true });
+      const l = (await listSubmissionPhotos(d, { gameId: GAME, view: "presenter", have: new Set() }))!;
+      assert.deepEqual(calls.signedPaths, [path(pPending), path(pApproved)], phase);
+      assert.deepEqual(l.submissions.map((r) => Boolean(r.photoUrl)), [true, true, false], `${phase}: rejected photo excluded`);
+      assert.equal(l.submissions[2].photoKey, null);
+    }
   });
 
   it("paths outside this game's folder, or malformed, are never signed", async () => {

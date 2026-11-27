@@ -32,6 +32,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const { data } = await admin.from("game_rounds").select("winner_player_id, winner_confirmed_at").eq("id", roundId).eq("game_id", screen.gameId).maybeSingle();
         return data?.winner_confirmed_at ? data.winner_player_id : null;
       },
+      showPhotoWall: async (roundId) => {
+        const { data } = await admin.from("game_rounds").select("show_photos_on_screen").eq("id", roundId).eq("game_id", screen.gameId).maybeSingle();
+        return Boolean(data?.show_photos_on_screen);
+      },
       sign: async (paths, ttlSeconds) => {
         const { data, error } = await admin.storage.from(SUBMISSION_BUCKET).createSignedUrls(paths, ttlSeconds);
         if (error) return new Map(); // the list still loads; the screen retries. Never log URLs or paths.

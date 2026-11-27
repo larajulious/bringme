@@ -72,9 +72,9 @@ async function finish(canvas: HTMLCanvasElement, source: PhotoSource, takenAt: n
 }
 
 /** Grab the current frame of a live camera preview (synchronously), then encode it. */
-export function captureFromVideo(video: HTMLVideoElement): Promise<CapturedPhoto> {
+export function captureFromVideo(video: HTMLVideoElement, options?: { mirror?: boolean }): Promise<CapturedPhoto> {
   const takenAt = Date.now();
-  const { canvas } = grabFrame(video, PHOTO_MAX_EDGE);
+  const { canvas } = grabFrame(video, PHOTO_MAX_EDGE, options?.mirror);
   return finish(canvas, "camera", takenAt);
 }
 

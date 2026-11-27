@@ -224,6 +224,8 @@ type RoundRow = {
   winner_confirmed_at: string | null;
   /** Set when the host replayed this round (it ended with no winner; a copy followed). */
   replayed_at: string | null;
+  /** Host opt-in per round: show players' non-rejected photos as a sticky-note wall on presenter/TV screens. */
+  show_photos_on_screen: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -457,6 +459,8 @@ export type Database = {
       };
       /** Host only (checked inside): approve / disqualify / reset one submission of the current round. */
       review_submission: { Args: { p_submission: string; p_decision: "approve" | "disqualify" | "reset" }; Returns: Json };
+      /** Host only (checked inside): toggle the sticky-note photo wall on presenter & TV screens for the current round. */
+      set_round_photo_wall: { Args: { p_game: string; p_show: boolean }; Returns: Json };
       /** Host (RLS): per-round results incl. the winners' photo paths. */
       game_results: {
         Args: { p_game: string };

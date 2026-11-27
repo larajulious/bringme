@@ -16,8 +16,8 @@ export const rosterKey = (s: K): string => s.rosterKey ?? `v${s.version}`;
 export const roundsKey = (s: K): string =>
   `${s.status}|${s.totalRounds}|${s.roundsRemaining}|${s.round?.id ?? "-"}|${s.round?.status ?? "-"}`;
 
-/** The current round's ranked photos: a new photo, a review decision, a removal, the round or phase, the official winner. */
+/** The current round's ranked photos: a new photo, a review decision, a removal, the round or phase, the official winner, or photo-wall visibility. */
 export const submissionsKey = (s: K): string =>
   s.submissionsKey === undefined
     ? `v${s.version}`
-    : `${s.round?.id ?? "-"}|${s.submissionsKey}|${s.phase}|${s.round?.status ?? "-"}|${s.round?.winnerPlayerId ?? "-"}|${s.round?.decided ?? false}`;
+    : `${s.round?.id ?? "-"}|${s.submissionsKey}|${s.phase}|${s.round?.status ?? "-"}|${s.round?.winnerPlayerId ?? "-"}|${s.round?.decided ?? false}|${s.round?.showPhotosOnScreen ?? false}`;

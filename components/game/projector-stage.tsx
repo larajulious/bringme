@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Backdrop } from "@/components/brand/backdrop";
 import { Countdown } from "@/components/game/countdown";
 import { ITEM_WRAP, isLongItem, itemSize } from "@/components/game/item-text";
+import { PhotoWall, type WallPhoto } from "@/components/game/photo-wall";
 import { WinnerStage } from "@/components/game/winner-stage";
 import { useNow } from "@/components/game/use-game-sync";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +22,15 @@ import { cn } from "@/lib/utils";
  * Photos are never shown here except the winner's, after it is official.
  */
 export function ProjectorStage({
-  s, offsetMs, submittedNames, winnerPhotoUrl, actions, presenter = false,
+  s, offsetMs, submittedNames, winnerPhotoUrl, wallPhotos, onPhotoError, actions, presenter = false,
 }: {
   s: HostSnapshot;
   offsetMs: number;
   submittedNames: string[];
   winnerPhotoUrl: string | null;
+  /** Players' photos to pin up on the sticky-note photo wall when the host enables it for this round. */
+  wallPhotos?: WallPhoto[];
+  onPhotoError?: (row: WallPhoto) => void;
   actions: ReactNode;
   /** Dedicated presenter window (/present/[id]): always full-viewport and large, no own fullscreen toggle. */
   presenter?: boolean;
@@ -56,7 +60,23 @@ export function ProjectorStage({
   const started = r?.openedAt ? now + offsetMs >= Date.parse(r.openedAt) : false;
 
   let body: ReactNode;
-  if (s.phase === "winner_announced" && r) {
+  const showWall = Boolean(r?.showPhotosOnScreen) && (s.phase === "reviewing" || s.phase === "winner_announced");
+  if (showWall && r) {
+    body = (
+      <PhotoWall
+        roundLabel={roundLabel}
+        prompt={r.prompt}
+        photos={wallPhotos ?? []}
+        winnerPlayerId={r.winnerPlayerId}
+        winnerName={r.winnerName}
+        phase={s.phase === "winner_announced" ? "winner_announced" : "reviewing"}
+        size={big ? "large" : "normal"}
+        onPhotoError={onPhotoError}
+      >
+        {actions}
+      </PhotoWall>
+    );
+  } else if (s.phase === "winner_announced" && r) {
     body = (
       <WinnerStage
         roundLabel={roundLabel} prompt={r.prompt} winnerName={r.winnerName} timeMs={r.winnerMs}
@@ -131,12 +151,12 @@ export function ProjectorStage({
     <div
       ref={ref}
       className={cn(
-        "relative isolate flex flex-col justify-center overflow-hidden bg-gradient-to-b from-primary to-brand-night text-center text-white",
-        big ? "h-viewport rounded-none p-[3dvh]" : "rounded-4xl p-4 sm:p-6",
+        "relative isolate flex flex-col overflow-hidden bg-gradient-to-b from-primary to-brand-night text-center text-white",
+        big ? "h-viewport rounded-none p-[3dvh]" : "justify-center rounded-4xl p-4 sm:p-6",
       )}
     >
       <Backdrop />
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+      <div className={cn("relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3", big ? "mb-[2dvh]" : "mb-2")}>
         <span className="flex items-center gap-2">
           <Badge variant="yellow">{s.title}</Badge>
           {s.joinCode ? <span className="font-mono text-sm font-bold text-white/80">Room {s.joinCode}</span> : null}
@@ -148,7 +168,7 @@ export function ProjectorStage({
           </Button>
         )}
       </div>
-      {body}
+      {big ? <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center">{body}</div> : body}
     </div>
   );
 }

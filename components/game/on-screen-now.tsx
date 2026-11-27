@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, DoorClosed, Hourglass, QrCode, Timer, Trophy, type LucideIcon } from "lucide-react";
+import { Clock, DoorClosed, Hourglass, Images, QrCode, Timer, Trophy, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import type { HostSnapshot } from "@/lib/game/types";
@@ -55,8 +55,16 @@ export function bringMeOnScreen(s: HostSnapshot): OnScreen {
       ? { key: `closed:${r.no}`, Icon: Timer, title: "Time's up", detail: `${s.submissionCount} ${s.submissionCount === 1 ? "photo" : "photos"} in` }
       : { key: `live:${r.no}`, Icon: Timer, title: `Round ${r.no}: the item and timer`, detail: `Bring me… ${r.prompt}` };
   }
-  if (s.phase === "reviewing") return { key: `review:${r?.no}`, Icon: Hourglass, title: "Judging time!", detail: r?.prompt ? `Does it show ${r.prompt}?` : undefined };
+  if (s.phase === "reviewing") {
+    if (r?.showPhotosOnScreen) {
+      return { key: `wall:${r.no}:review`, Icon: Images, title: "Sticky-note photo wall", detail: r.prompt ? `Bring me… ${r.prompt}` : `Round ${r.no} photos` };
+    }
+    return { key: `review:${r?.no}`, Icon: Hourglass, title: "Judging time!", detail: r?.prompt ? `Does it show ${r.prompt}?` : undefined };
+  }
   if (s.phase === "winner_announced" && r) {
+    if (r.showPhotosOnScreen) {
+      return { key: `wall:${r.no}:winner`, Icon: Images, title: "Sticky-note photo wall", detail: r.winnerName ? `Round ${r.no} · Winner: ${r.winnerName}` : `Round ${r.no} photos` };
+    }
     return { key: `winner:${r.no}`, Icon: Trophy, title: r.winnerName ? `Winner: ${r.winnerName}` : "No winner this round", detail: `Round ${r.no} of ${s.totalRounds}` };
   }
   return s.roundsRemaining > 0

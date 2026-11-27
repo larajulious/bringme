@@ -1,13 +1,13 @@
 "use client";
 
-import { DoorClosed, Expand, Link2Off, Minimize, Users } from "lucide-react";
+import { DoorClosed, Expand, Images, Link2Off, Minimize, Users } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Backdrop } from "@/components/brand/backdrop";
 import { Logo } from "@/components/brand/logo";
 import { Mascot } from "@/components/brand/mascot";
 import { Confetti } from "@/components/game/confetti";
-import { fetchHostSnapshot, fetchRoster } from "@/components/game/host-api";
+import { fetchHostSnapshot, fetchRoster, setRoundPhotoWall } from "@/components/game/host-api";
 import { rosterKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { ProjectorStage } from "@/components/game/projector-stage";
 import { fetchScreenSnapshot, screenApi } from "@/components/game/screen-api";
@@ -36,7 +36,7 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl, 
   gameId: string; initial: HostSnapshot; initialPlayers: Player[]; qr: ReactNode; joinUrl: string; screenToken?: string;
 }) {
   const api = screenToken ? screenApi(screenToken) : null;
-  const { state: s, conn, offsetMs, unauthorized } = useGameSync<HostSnapshot>({
+  const { state: s, conn, offsetMs, unauthorized, applyState } = useGameSync<HostSnapshot>({
     gameId, initial,
     ...(screenToken
       ? { role: "screen" as const, tokenUrl: `${api}/realtime-token`, fetchSnapshot: () => fetchScreenSnapshot<HostSnapshot>(screenToken) }
@@ -44,6 +44,7 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl, 
   });
   const [players, setPlayers] = useState(initialPlayers);
   const [photos, setPhotos] = useState<{ no: number; photoUrl: string | null }[]>([]);
+  const [togglingWall, setTogglingWall] = useState(false);
   const chrome = useChrome();
 
   // Roster for the lobby wall: re-read when someone joins or is removed.
@@ -57,10 +58,11 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl, 
     return () => { live = false; };
   }, [gameId, api, rosterDep]);
 
-  // During a round: who has submitted (names only on screen) and, once official, the winner's photo.
-  // The presenter view never receives any other photo URL (Phase 3: a public screen holds no review photos).
+  // During a round: who has submitted (names only on screen) and, once official (or when the host enables the
+  // round's sticky-note photo wall), the allowed photo URLs. Rejected photos are never signed for this view.
   const inRound = (s.phase === "active" || s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(s.round);
-  const rows = useSubmissionRows(gameId, { view: "presenter", enabled: inRound, dep: submissionsKey(s), url: api ? `${api}/submissions` : undefined }).rows ?? [];
+  const sub = useSubmissionRows(gameId, { view: "presenter", enabled: inRound, dep: submissionsKey(s), url: api ? `${api}/submissions` : undefined });
+  const rows = sub.rows ?? [];
 
   useEffect(() => {
     if (s.status !== "finished") return;
@@ -74,12 +76,23 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl, 
 
   const r = s.round;
   const winnerPhoto = s.phase === "winner_announced" && r?.decided && r.winnerPlayerId ? rows.find((x) => x.playerId === r.winnerPlayerId)?.photoUrl ?? null : null;
+  const wallPhotos = rows.filter((x) => x.photoKey !== null);
+  const photoWallOn = Boolean(r?.showPhotosOnScreen);
+  const canHostToggleWall = !screenToken && s.status === "live" && (s.phase === "reviewing" || s.phase === "winner_announced") && Boolean(r) && s.submissionCount > 0;
+
+  const toggleWall = async () => {
+    if (togglingWall) return;
+    setTogglingWall(true);
+    const res = await setRoundPhotoWall(gameId, !photoWallOn);
+    setTogglingWall(false);
+    if (res.ok) applyState(res.state);
+  };
 
   let body: ReactNode;
   if (screenToken && unauthorized) body = <LinkEnded />;
   else if (s.status === "finished" || s.status === "canceled") body = <FinalScreen s={s} photos={photos} />;
   else if (s.phase === "lobby" && s.status === "lobby") body = <LobbyWall s={s} players={players} qr={qr} joinUrl={joinUrl} />;
-  else body = <ProjectorStage presenter s={s} offsetMs={offsetMs} submittedNames={rows.map((x) => x.nickname)} winnerPhotoUrl={winnerPhoto} actions={null} />;
+  else body = <ProjectorStage presenter s={s} offsetMs={offsetMs} submittedNames={rows.map((x) => x.nickname)} winnerPhotoUrl={winnerPhoto} wallPhotos={wallPhotos} onPhotoError={sub.photoFailed} actions={null} />;
 
   return (
     <div className={cn("relative h-viewport overflow-hidden bg-brand-night text-white", chrome.idle && "cursor-none")}>
@@ -94,6 +107,18 @@ export function PresenterScreen({ gameId, initial, initialPlayers, qr, joinUrl, 
           <span aria-hidden="true" className={cn("size-2.5 rounded-full", conn === "live" ? "bg-emerald-500" : conn === "offline" ? "bg-brand-coral" : "bg-brand-yellow")} />
           {connText[conn]}
         </span>
+        {canHostToggleWall ? (
+          <Button
+            type="button"
+            variant={photoWallOn ? "default" : "outline-light"}
+            size="sm"
+            disabled={togglingWall}
+            onClick={() => void toggleWall()}
+          >
+            <Images aria-hidden="true" />
+            {photoWallOn ? (s.phase === "winner_announced" ? "Back to winner" : "Hide photo wall") : "Photo wall"}
+          </Button>
+        ) : null}
         <Button type="button" variant="outline-light" size="sm" onClick={chrome.toggleFullscreen}>
           {chrome.fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}
           {chrome.fullscreen ? "Exit fullscreen" : "Fullscreen"} <kbd className="ml-1 rounded bg-white/15 px-1.5 font-mono text-xs">F</kbd>

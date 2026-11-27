@@ -1,11 +1,20 @@
 "use client";
 
-import { Camera, CameraOff, Download, ImageUp, Lock, RefreshCw, RotateCcw, Save, TriangleAlert, X } from "lucide-react";
+import { Camera, CameraOff, Download, ImageUp, Lock, RefreshCw, RotateCcw, Save, SwitchCamera, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { WaitingDots } from "@/components/game/waiting-dots";
 import { Button } from "@/components/ui/button";
-import { cameraHelp, classifyCameraError, openCamera, type CameraFailure } from "@/lib/game/camera";
+import {
+  cameraHelp,
+  classifyCameraError,
+  flipFacing,
+  isSelfieFacing,
+  openCamera,
+  type CameraFacing,
+  type CameraFailure,
+  type ResolvedCameraFacing,
+} from "@/lib/game/camera";
 import { PhotoProcessError, captureFromFile, captureFromVideo, processHelp, type CapturedPhoto } from "@/lib/photos/process";
 import { PhotoStoreError, classifyStorageError, storeHelp } from "@/lib/photos/store";
 import { cn } from "@/lib/utils";
@@ -87,6 +96,12 @@ export function PhotoCapture({
 
   const [mode, setMode] = useState<Mode>({ kind: existing ? "existing" : "camera" });
   const [cam, setCam] = useState<Cam>("starting");
+  const [preferredFacing, setPreferredFacing] = useState<CameraFacing>("environment");
+  const [actualFacing, setActualFacing] = useState<ResolvedCameraFacing>("unknown");
+  const [switching, setSwitching] = useState(false);
+  const facingRef = useRef<CameraFacing>("environment");
+  const actualFacingRef = useRef<ResolvedCameraFacing>("unknown");
+  const exactFacingRef = useRef(false);
   const [frames, setFrames] = useState(false);
   /** Changes with every NEW live stream, so the <video> is re-attached even when `cam` stays "live". */
   const [streamKey, setStreamKey] = useState(0);
@@ -137,23 +152,41 @@ export function PhotoCapture({
     streamRef.current?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+    setSwitching(false);
     setFrames(false);
   }, []);
 
-  const startStream = useCallback(async () => {
+  const startStream = useCallback(async (override?: { facing: CameraFacing; exact: boolean }) => {
+    if (override) {
+      facingRef.current = override.facing;
+      exactFacingRef.current = override.exact;
+      setPreferredFacing(override.facing);
+    }
     stopStream();
     const gen = genRef.current;
     startingRef.current = true;
+    setSwitching(Boolean(override));
     setCam("starting");
-    const r = await openCamera(navigator.mediaDevices, window.isSecureContext).catch((e) => ({ ok: false as const, reason: classifyCameraError(e) }));
+    const target = facingRef.current;
+    const r = await openCamera(navigator.mediaDevices, window.isSecureContext, {
+      facing: target,
+      exact: exactFacingRef.current || target === "user",
+    }).catch((e) => ({ ok: false as const, reason: classifyCameraError(e) }));
     if (gen !== genRef.current) {
       // A newer start (or a close) happened meanwhile: never let this late stream hold the camera.
       if (r.ok) r.stream.getTracks().forEach((t) => t.stop());
       return;
     }
     startingRef.current = false;
+    setSwitching(false);
     if (!r.ok) return setCam(r.reason);
     streamRef.current = r.stream;
+    actualFacingRef.current = r.facing;
+    setActualFacing(r.facing);
+    if (r.facing === "environment" || r.facing === "user") {
+      facingRef.current = r.facing;
+      setPreferredFacing(r.facing);
+    }
     for (const t of r.stream.getVideoTracks()) t.onended = () => setCam("interrupted");
     setCam("live");
     setStreamKey((k) => k + 1);
@@ -220,13 +253,15 @@ export function PhotoCapture({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [wantCamera, startStream]);
 
+  const isSelfie = isSelfieFacing(actualFacing, preferredFacing);
+
   // -------------------------------------------------------- capturing ----
   const shoot = () => {
     const v = videoRef.current;
     if (lock.current || !v || v.readyState < 2 || !v.videoWidth) return;
     lock.current = true;
     setFlash((n) => n + 1);
-    const pending = captureFromVideo(v); // the frame is grabbed synchronously, right now
+    const pending = captureFromVideo(v, { mirror: isSelfie }); // the frame is grabbed synchronously, right now
     v.pause();
     setMode({ kind: "processing" });
     pending
@@ -263,6 +298,12 @@ export function PhotoCapture({
 
   const retake = () => { setError(null); restarts.current = 0; setMode({ kind: "camera" }); };
   const restartCamera = () => { restarts.current = 0; void startStream(); };
+  const flipCamera = () => {
+    if (busy || switching) return;
+    setError(null);
+    restarts.current = 0;
+    void startStream({ facing: flipFacing(actualFacingRef.current, facingRef.current), exact: true });
+  };
   const close = () => { if (!busy) onClose(); };
 
   // ------------------------------------------------------------- view ----
@@ -306,10 +347,20 @@ export function PhotoCapture({
   } else {
     stage = (
       <>
-        <video ref={videoRef} playsInline muted autoPlay aria-label="Live camera preview" className="h-full w-full bg-black object-cover" />
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          autoPlay
+          aria-label="Live camera preview"
+          className={cn("h-full w-full bg-black object-cover", isSelfie && "-scale-x-100")}
+        />
         {cam === "starting" || !frames ? (
           <div className="absolute inset-0 grid place-items-center bg-black/60" role="status">
-            <div className="grid justify-items-center gap-2"><WaitingDots /><p>{cam === "starting" ? "Opening the camera…" : "Starting the preview…"}</p></div>
+            <div className="grid justify-items-center gap-2">
+              <WaitingDots />
+              <p>{switching ? "Switching camera…" : cam === "starting" ? "Opening the camera…" : "Starting the preview…"}</p>
+            </div>
           </div>
         ) : null}
         <div aria-hidden="true" className="pointer-events-none absolute inset-3">
@@ -385,19 +436,38 @@ export function PhotoCapture({
             ) : readOnly ? (
               <Button variant="outline-light" size="lg" onClick={close}>Close</Button>
             ) : (
-              <div className="grid justify-items-center gap-2">
+              <div className="grid w-full justify-items-center gap-2">
                 {!camHelp ? (
-                  <button
-                    type="button"
-                    aria-label="Take photo"
-                    disabled={cam !== "live" || !frames || busy}
-                    onClick={shoot}
-                    className="relative grid size-20 touch-manipulation select-none place-items-center rounded-full border-4 border-white p-1.5 transition-transform motion-safe:active:scale-95 disabled:opacity-40"
-                  >
-                    <span className="grid size-full place-items-center rounded-full bg-brand-coral text-white shadow-pop-coral"><Camera aria-hidden="true" className="size-8" /></span>
-                  </button>
+                  <div className="grid w-full max-w-xs grid-cols-[1fr_auto_1fr] items-center gap-4">
+                    <span aria-hidden="true" />
+                    <button
+                      type="button"
+                      aria-label="Take photo"
+                      disabled={cam !== "live" || !frames || busy || switching}
+                      onClick={shoot}
+                      className="relative grid size-20 touch-manipulation select-none place-items-center rounded-full border-4 border-white p-1.5 transition-transform motion-safe:active:scale-95 disabled:opacity-40"
+                    >
+                      <span className="grid size-full place-items-center rounded-full bg-brand-coral text-white shadow-pop-coral"><Camera aria-hidden="true" className="size-8" /></span>
+                    </button>
+                    <div className="flex justify-start">
+                      <button
+                        type="button"
+                        aria-label={isSelfie ? "Switch to back camera" : "Switch to selfie camera"}
+                        aria-pressed={isSelfie}
+                        title={isSelfie ? "Switch to back camera" : "Switch to selfie camera"}
+                        disabled={cam === "starting" || busy || switching}
+                        onClick={flipCamera}
+                        className="grid touch-manipulation select-none justify-items-center gap-1 rounded-2xl p-1 text-white/85 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow disabled:opacity-40"
+                      >
+                        <span className="grid size-12 place-items-center rounded-full border-2 border-white/30 bg-white/12 transition-all hover:bg-white/20 motion-safe:active:scale-95">
+                          <SwitchCamera aria-hidden="true" className={cn("size-6", switching && "animate-spin motion-reduce:animate-none")} />
+                        </span>
+                        <span className="text-xs font-semibold text-white/75" aria-hidden="true">{isSelfie ? "Back" : "Selfie"}</span>
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
-                <input ref={fileRef} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onFile} />
+                <input ref={fileRef} type="file" accept="image/*" capture={preferredFacing} className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onFile} />
                 {camHelp ? (
                   <Button variant="camera" size="lg" onClick={() => fileRef.current?.click()}><ImageUp aria-hidden="true" /> {fallbackLabel}</Button>
                 ) : slow ? (

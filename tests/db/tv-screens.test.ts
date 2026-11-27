@@ -105,4 +105,42 @@ describe("TV links", () => {
     assert.equal(await canListen(claims, main), false, "reset cuts off the old TV");
     assert.equal(await canListen(claims, hostTopic), false);
   });
+
+  it("per-round sticky-note photo wall: host toggles before/after winner, resets on announce & next round, owner-only", async () => {
+    const g = await newGame();
+    const t = await link(g.game_id);
+    const setWall = (show: boolean, sub = host) =>
+      as(db, user(sub), async () => (await db.query<{ s: { round: { showPhotosOnScreen: boolean } } }>("select public.set_round_photo_wall($1,$2) s", [g.game_id, show])).rows[0].s);
+
+    await as(db, svc, () => db.query("select * from public.join_game($1,'Ann',$2,null)", [g.code, hashToken(generatePlayerToken())]));
+    for (const a of ["start_game", "start_countdown", "start_round"]) await act(g.game_id, a);
+    await db.query("update public.game_rounds set opened_at = clock_timestamp() - interval '1 second' where game_id=$1 and status='open'", [g.game_id]);
+
+    // Refused during an open hunt, for another host, or for anon.
+    assert.match((await errorOf(setWall(true))) ?? "", /invalid_transition/);
+    assert.match((await errorOf(setWall(true, other))) ?? "", /game_not_found/);
+    assert.match((await errorOf(as(db, { role: "anon" }, () => db.query("select public.set_round_photo_wall($1, true)", [g.game_id])))) ?? "", /permission denied/);
+
+    // Close and move to reviewing: host can toggle the photo wall ON and the TV snapshot reflects it.
+    for (const a of ["close_submissions", "move_to_review"]) await act(g.game_id, a);
+    assert.equal(((await screen(t))?.round as { showPhotosOnScreen: boolean }).showPhotosOnScreen, false, "off by default");
+
+    const beforeWin = await setWall(true);
+    assert.equal(beforeWin.round.showPhotosOnScreen, true);
+    assert.equal(((await screen(t))?.round as { showPhotosOnScreen: boolean }).showPhotosOnScreen, true);
+
+    // Announcing winner automatically resets showPhotosOnScreen so the winner reveal takes the TV.
+    await act(g.game_id, "announce_winner");
+    assert.equal(((await screen(t))?.round as { showPhotosOnScreen: boolean }).showPhotosOnScreen, false, "reset when winner is announced");
+
+    // Host can turn the photo wall back ON after the winner announcement, and OFF again.
+    assert.equal((await setWall(true)).round.showPhotosOnScreen, true);
+    assert.equal(((await screen(t))?.round as { showPhotosOnScreen: boolean }).showPhotosOnScreen, true);
+    assert.equal((await setWall(false)).round.showPhotosOnScreen, false);
+
+    // Next round starts fresh with photo wall off.
+    await setWall(true);
+    for (const a of ["next_round", "start_countdown", "start_round"]) await act(g.game_id, a);
+    assert.equal(((await screen(t))?.round as { showPhotosOnScreen: boolean }).showPhotosOnScreen, false);
+  });
 });

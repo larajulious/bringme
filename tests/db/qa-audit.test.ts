@@ -38,6 +38,7 @@ const AUTH_EXEC = [
   "replay_round", // migration 26: owner-checked inside
   "review_submission", "round_ranking",
   "screen_link", // migration 20261113000003: owner-checked inside
+  "set_round_photo_wall", // migration 20261128000001: owner-checked inside
   "start_trial",
 ];
 const execFor = async (role: string) => (await db.query<{ proname: string }>(
@@ -98,7 +99,7 @@ describe("TypeScript types match the migrated schema", () => {
       });
       if (!ok) missing.push(`${name}(${args.join(",")})`);
     }
-    assert.equal(count, 83, `parsed ${count} functions (update when the types gain or lose functions)`);
+    assert.equal(count, 84, `parsed ${count} functions (update when the types gain or lose functions)`);
     assert.deepEqual(missing, []);
   });
 });

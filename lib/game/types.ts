@@ -18,6 +18,8 @@ export type RoundSnapshot = {
   winnerMs: number | null;
   /** True once the winner (or "no winner") is official and final. */
   decided: boolean;
+  /** Host opt-in per round: show players' non-rejected photos as a sticky-note wall on presenter/TV screens. */
+  showPhotosOnScreen?: boolean;
 };
 
 export type ResultRow = {

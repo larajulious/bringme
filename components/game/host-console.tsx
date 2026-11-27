@@ -1,10 +1,10 @@
 "use client";
 
-import { Camera, ChevronDown, Flag, Hourglass, MonitorPlay, Play, Plus, RotateCcw, Square, Trophy, Users } from "lucide-react";
+import { Camera, ChevronDown, Flag, Hourglass, Images, MonitorPlay, Play, Plus, RotateCcw, Square, Trophy, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { FinishedResults } from "@/components/game/finished-results";
-import { fetchHostSnapshot, fetchRoster, fetchRounds, replayRound, runSteps } from "@/components/game/host-api";
+import { fetchHostSnapshot, fetchRoster, fetchRounds, replayRound, runSteps, setRoundPhotoWall } from "@/components/game/host-api";
 import { ITEM_WRAP, itemSize } from "@/components/game/item-text";
 import { rosterKey, roundsKey, submissionsKey } from "@/lib/game/refresh-keys";
 import { useSubmissionRows } from "@/components/game/use-submission-rows";
@@ -77,6 +77,7 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
   const [roundList, setRoundList] = useState<RoundRow[]>(initialRounds);
   const [newItem, setNewItem] = useState("");
   const [adding, setAdding] = useState(false);
+  const [togglingWall, setTogglingWall] = useState(false);
 
   // Each side list is re-read only when its own data changed (Phase 2): photos and reviews no longer re-read the roster.
   const rosterDep = rosterKey(s);
@@ -271,6 +272,29 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
     void ok; // the applied state re-reads the list (fingerprint changed)
   };
 
+  const photoWallOn = Boolean(r?.showPhotosOnScreen);
+  const wallCount = rows
+    ? rows.filter((x) => x.status !== "rejected").length
+    : Math.max(0, s.submissionCount - (s.reviewCounts?.rejected ?? 0));
+  const canToggleWall = Boolean(r) && (s.phase === "reviewing" || s.phase === "winner_announced") && (photoWallOn || wallCount > 0);
+  const wallButtonLabel = photoWallOn
+    ? (s.phase === "winner_announced" ? "Back to winner on TV" : "Hide photo wall on TV")
+    : (s.phase === "winner_announced" ? `Show photo wall on TV (${wallCount})` : `Show photos on TV (${wallCount})`);
+
+  const togglePhotoWall = async () => {
+    if (togglingWall || busy !== null) return;
+    setTogglingWall(true);
+    const res = await setRoundPhotoWall(gameId, !photoWallOn);
+    setTogglingWall(false);
+    if (res.ok) {
+      applyState(res.state);
+      toast(!photoWallOn ? "Sticky-note photo wall is now on the presenter & TV screen." : "Photo wall hidden on the presenter & TV screen.", "success");
+      return;
+    }
+    resync();
+    toast(errorCopy[res.error] ?? "Couldn't update the presenter screen. Please try again.", "error");
+  };
+
   return (
     <div className="grid gap-6">
       <Card>
@@ -318,10 +342,26 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
             <p className="text-sm text-muted-foreground sm:text-base">{step.hint}</p>
           </div>
 
-          {wantRows && !(s.phase === "reviewing" && pending > 0) ? (
-            <Button variant="secondary" className={cn(WRAP, "mx-auto w-full sm:w-auto")} onClick={() => setShowPhotos(true)}>
-              <Camera aria-hidden="true" /> See photos ({rows?.length ?? s.submissionCount})
-            </Button>
+          {(wantRows && !(s.phase === "reviewing" && pending > 0)) || canToggleWall ? (
+            <div className="flex flex-wrap justify-center gap-2">
+              {wantRows && !(s.phase === "reviewing" && pending > 0) ? (
+                <Button variant="secondary" className={cn(WRAP, "w-full sm:w-auto")} onClick={() => setShowPhotos(true)}>
+                  <Camera aria-hidden="true" /> See photos ({rows?.length ?? s.submissionCount})
+                </Button>
+              ) : null}
+              {canToggleWall ? (
+                <Button
+                  type="button"
+                  variant={photoWallOn ? "default" : "outline"}
+                  aria-pressed={photoWallOn}
+                  disabled={togglingWall || busy !== null}
+                  className={cn(WRAP, "w-full sm:w-auto")}
+                  onClick={() => void togglePhotoWall()}
+                >
+                  <Images aria-hidden="true" /> {togglingWall ? "Updating TV…" : wallButtonLabel}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
 
           <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-sm text-muted-foreground">
@@ -353,11 +393,39 @@ export function HostConsole({ gameId, initial, initialPlayers, initialRounds = [
           s.phase === "reviewing" && !locked ? (
             <>
               <Button variant="outline" className={FOOT} onClick={() => setShowPhotos(false)}>Close</Button>
+              {canToggleWall ? (
+                <Button
+                  type="button"
+                  variant={photoWallOn ? "default" : "secondary"}
+                  aria-pressed={photoWallOn}
+                  className={FOOT}
+                  disabled={togglingWall || busy !== null}
+                  onClick={() => void togglePhotoWall()}
+                >
+                  <Images aria-hidden="true" /> {togglingWall ? "Updating TV…" : wallButtonLabel}
+                </Button>
+              ) : null}
               <Button className={FOOT} disabled={busy !== null || rows === null} onClick={() => { setShowPhotos(false); setConfirmWinner(true); }}>
                 <Trophy aria-hidden="true" /> {confirmation.kind === "winner" ? "Announce winner…" : "Announce no winner…"}
               </Button>
             </>
-          ) : <Button variant="outline" className={FOOT} onClick={() => setShowPhotos(false)}>Close</Button>
+          ) : (
+            <>
+              {canToggleWall ? (
+                <Button
+                  type="button"
+                  variant={photoWallOn ? "default" : "secondary"}
+                  aria-pressed={photoWallOn}
+                  className={FOOT}
+                  disabled={togglingWall || busy !== null}
+                  onClick={() => void togglePhotoWall()}
+                >
+                  <Images aria-hidden="true" /> {togglingWall ? "Updating TV…" : wallButtonLabel}
+                </Button>
+              ) : null}
+              <Button variant="outline" className={FOOT} onClick={() => setShowPhotos(false)}>Close</Button>
+            </>
+          )
         }
       >
         <PhotoReviewGrid rows={rows} locked={locked} busyId={busyId} error={rowsError} onReview={review} onOpen={(x) => setViewing(x.submissionId)} onPhotoError={photoFailed} />

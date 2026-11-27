@@ -36,6 +36,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const { data } = await supabase.from("game_rounds").select("winner_player_id, winner_confirmed_at").eq("id", roundId).maybeSingle();
         return data?.winner_confirmed_at ? data.winner_player_id : null;
       },
+      showPhotoWall: async (roundId) => {
+        const { data } = await supabase.from("game_rounds").select("show_photos_on_screen").eq("id", roundId).maybeSingle();
+        return Boolean(data?.show_photos_on_screen);
+      },
       sign: async (paths, ttlSeconds) => {
         const { data, error } = await supabase.storage.from(SUBMISSION_BUCKET).createSignedUrls(paths, ttlSeconds);
         if (error) {

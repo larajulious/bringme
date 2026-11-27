@@ -1,17 +1,27 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { openCamera, type CameraFailure } from "@/lib/game/camera";
+import {
+  flipFacing,
+  openCamera,
+  type CameraFacing,
+  type CameraFailure,
+  type ResolvedCameraFacing,
+} from "@/lib/game/camera";
 
 export type CameraStatus = "idle" | "requesting" | "ready" | "interrupted" | CameraFailure;
 
 type CameraCtx = {
   status: CameraStatus;
-  facing: "environment" | "user" | "unknown";
+  facing: ResolvedCameraFacing;
+  preferredFacing: CameraFacing;
+  switching: boolean;
   stream: MediaStream | null;
   /** Must be called from a tap/click (iOS Safari requires a user gesture). */
   enable: () => Promise<void>;
+  /** Switch between rear ("environment") and selfie ("user") camera. */
+  switchCamera: () => Promise<void>;
   /** Pause/resume frame delivery without releasing the permission. */
   setActive: (on: boolean) => void;
   stop: () => void;
@@ -33,35 +43,69 @@ export function useCamera(): CameraCtx {
  */
 export function CameraProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<CameraStatus>("idle");
-  const [facing, setFacing] = useState<CameraCtx["facing"]>("unknown");
+  const [facing, setFacing] = useState<ResolvedCameraFacing>("unknown");
+  const [preferredFacing, setPreferredFacing] = useState<CameraFacing>("environment");
+  const [switching, setSwitching] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const facingRef = useRef<ResolvedCameraFacing>("unknown");
+  const preferredFacingRef = useRef<CameraFacing>("environment");
+  const activeRef = useRef(true);
   const opening = useRef(false);
+  const genRef = useRef(0);
 
   const release = useCallback(() => {
+    genRef.current++;
     streamRef.current?.getTracks().forEach((t) => { t.onended = null; t.onmute = null; t.onunmute = null; t.stop(); });
     streamRef.current = null;
     setStream(null);
   }, []);
 
-  const enable = useCallback(async () => {
+  const openWith = useCallback(async (target: CameraFacing, mode: "enable" | "switch") => {
     if (opening.current) return;
     opening.current = true;
-    setStatus("requesting");
+    preferredFacingRef.current = target;
+    setPreferredFacing(target);
+    if (mode === "switch") setSwitching(true);
+    else setStatus("requesting");
     release();
-    const r = await openCamera(navigator.mediaDevices, window.isSecureContext);
+    const gen = genRef.current;
+    const r = await openCamera(navigator.mediaDevices, window.isSecureContext, {
+      facing: target,
+      exact: mode === "switch" || target === "user",
+    });
+    if (gen !== genRef.current) {
+      if (r.ok) r.stream.getTracks().forEach((t) => t.stop());
+      opening.current = false;
+      setSwitching(false);
+      return;
+    }
     opening.current = false;
+    setSwitching(false);
     if (!r.ok) return setStatus(r.reason);
     for (const t of r.stream.getVideoTracks()) {
+      t.enabled = activeRef.current;
       t.onended = () => setStatus((cur) => (cur === "ready" ? "interrupted" : cur));
       t.onmute = () => setStatus((cur) => (cur === "ready" ? "interrupted" : cur));
       t.onunmute = () => setStatus((cur) => (cur === "interrupted" && t.readyState === "live" ? "ready" : cur));
     }
     streamRef.current = r.stream;
+    facingRef.current = r.facing;
+    if (r.facing === "environment" || r.facing === "user") {
+      preferredFacingRef.current = r.facing;
+      setPreferredFacing(r.facing);
+    }
     setStream(r.stream);
     setFacing(r.facing);
     setStatus("ready");
   }, [release]);
+
+  const enable = useCallback(() => openWith(preferredFacingRef.current, "enable"), [openWith]);
+
+  const switchCamera = useCallback(
+    () => openWith(flipFacing(facingRef.current, preferredFacingRef.current), "switch"),
+    [openWith],
+  );
 
   // Already allowed on this device? Open it without waiting for a tap (not supported everywhere: optional).
   useEffect(() => {
@@ -86,9 +130,20 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   useEffect(() => release, [release]);
 
   const setActive = useCallback((on: boolean) => {
+    activeRef.current = on;
     streamRef.current?.getVideoTracks().forEach((t) => { t.enabled = on; });
   }, []);
-  const stop = useCallback(() => { release(); setStatus("idle"); }, [release]);
+  const stop = useCallback(() => {
+    release();
+    opening.current = false;
+    setSwitching(false);
+    setStatus("idle");
+  }, [release]);
 
-  return <Ctx.Provider value={{ status, facing, stream, enable, setActive, stop }}>{children}</Ctx.Provider>;
+  const value = useMemo<CameraCtx>(
+    () => ({ status, facing, preferredFacing, switching, stream, enable, switchCamera, setActive, stop }),
+    [status, facing, preferredFacing, switching, stream, enable, switchCamera, setActive, stop],
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

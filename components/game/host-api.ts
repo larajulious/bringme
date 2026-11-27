@@ -65,6 +65,21 @@ export async function runAction(
 }
 export { phaseKey };
 
+/** Toggle the sticky-note photo wall on the presenter & TV screens for the current round. */
+export async function setRoundPhotoWall(gameId: string, show: boolean): Promise<TransitionResult> {
+  try {
+    const res = await fetch(`/api/host/games/${gameId}/photo-wall`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ show }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { state?: HostSnapshot; error?: string };
+    return res.ok && body.state ? { ok: true, state: body.state } : { ok: false, error: body.error ?? "request_failed" };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 /** Replay the current round (photos stopped too early). Same stale-state handling as runAction. */
 export async function replayRound(gameId: string, current: HostSnapshot): Promise<{ result: TransitionResult; changedUnderneath?: HostSnapshot }> {
   const post = async (version: number): Promise<TransitionResult> => {

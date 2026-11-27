@@ -7,12 +7,23 @@ import { MAX_EDGE_PX, QUALITY_LADDER, TARGET_MAX_BYTES, fitWithin } from "./came
  * it first thing in the tap handler. The frame is scaled down while drawing, so
  * "compression" starts here at no extra cost.
  */
-export function grabFrame(video: HTMLVideoElement, maxEdge: number = MAX_EDGE_PX): { canvas: HTMLCanvasElement; width: number; height: number } {
+export function grabFrame(
+  video: HTMLVideoElement,
+  maxEdge: number = MAX_EDGE_PX,
+  mirror = false,
+): { canvas: HTMLCanvasElement; width: number; height: number } {
   const { width, height } = fitWithin(video.videoWidth, video.videoHeight, maxEdge);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  canvas.getContext("2d")?.drawImage(video, 0, 0, width, height);
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    if (mirror) {
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, width, height);
+  }
   return { canvas, width, height };
 }
 

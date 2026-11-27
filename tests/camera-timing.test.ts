@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { classifyCameraError, fitWithin, openCamera } from "../lib/game/camera.ts";
+import { classifyCameraError, fitWithin, flipFacing, isSelfieFacing, openCamera } from "../lib/game/camera.ts";
 import { ClockSync } from "../lib/game/clock.ts";
 import { SubmissionFlow, SubmitError, type BeginResult, type FlowState, type SubmitDeps } from "../lib/game/submit-flow.ts";
 import { formatElapsed, parseElapsedMs, sanitizeClientMeta } from "../lib/game/timing.ts";
@@ -115,6 +115,54 @@ describe("camera permission and device handling", () => {
     assert.deepEqual([r.ok, r.ok && r.facing], [true, "environment"]);
     assert.deepEqual((asked!.video as MediaTrackConstraints).facingMode, { ideal: "environment" });
     assert.equal(asked!.audio, false, "never asks for the microphone");
+  });
+
+  it("can open the selfie camera and uses exact facing first when switching", async () => {
+    const calls: MediaStreamConstraints[] = [];
+    const r = await openCamera(
+      { getUserMedia: async (c) => { calls.push(c); return stream("user"); } },
+      true,
+      { facing: "user", exact: true },
+    );
+    assert.deepEqual([r.ok, r.ok && r.facing], [true, "user"]);
+    assert.equal(calls.length, 1);
+    assert.deepEqual((calls[0].video as MediaTrackConstraints).facingMode, { exact: "user" });
+  });
+
+  it("infers facing when exact constraint succeeds on browsers that omit track settings", async () => {
+    const r = await openCamera({ getUserMedia: async () => stream() }, true, { facing: "user", exact: true });
+    assert.deepEqual([r.ok, r.ok && r.facing], [true, "user"]);
+  });
+
+  it("falls back cleanly when switching on a single-camera device", async () => {
+    const calls: MediaStreamConstraints[] = [];
+    const r = await openCamera(
+      {
+        getUserMedia: async (c) => {
+          calls.push(c);
+          if (calls.length <= 2) throw err("OverconstrainedError");
+          return stream("user");
+        },
+      },
+      true,
+      { facing: "environment", exact: true },
+    );
+    assert.deepEqual([r.ok, r.ok && r.facing], [true, "user"]);
+    assert.equal(calls.length, 3);
+    assert.deepEqual((calls[0].video as MediaTrackConstraints).facingMode, { exact: "environment" });
+    assert.deepEqual((calls[1].video as MediaTrackConstraints).facingMode, { exact: "environment" });
+    assert.deepEqual((calls[2].video as MediaTrackConstraints).facingMode, { ideal: "environment" });
+  });
+
+  it("flipFacing and isSelfieFacing handle known and unknown lenses", () => {
+    assert.equal(flipFacing("environment", "environment"), "user");
+    assert.equal(flipFacing("user", "environment"), "environment");
+    assert.equal(flipFacing("unknown", "environment"), "user");
+    assert.equal(flipFacing("unknown", "user"), "environment");
+    assert.equal(isSelfieFacing("environment", "user"), false);
+    assert.equal(isSelfieFacing("user", "environment"), true);
+    assert.equal(isSelfieFacing("unknown", "environment"), false);
+    assert.equal(isSelfieFacing("unknown", "user"), true);
   });
 
   it("falls back to any camera when the rear one can't satisfy the constraints", async () => {
